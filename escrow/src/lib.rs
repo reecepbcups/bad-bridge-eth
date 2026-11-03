@@ -63,6 +63,8 @@ pub enum ExecuteMsg {
     /// there: a proof submitted before this call can still be claimed on Ethereum after the
     /// refund, minting the same token twice across chains.
     EmergencyUnlock { token_ids: Vec<u32> },
+    /// Admin-only. Permanently removes the admin, disabling EmergencyUnlock forever.
+    RenounceAdmin {},
 }
 
 /// cw721 TransferNft payload, inlined for the same reason as Cw721ReceiveMsg above.
@@ -116,6 +118,7 @@ pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> 
     match msg {
         ExecuteMsg::ReceiveNft(rcv) => receive_nft(deps, info, rcv),
         ExecuteMsg::EmergencyUnlock { token_ids } => emergency_unlock(deps, info, token_ids),
+        ExecuteMsg::RenounceAdmin {} => renounce_admin(deps, info),
     }
 }
 
@@ -157,9 +160,7 @@ fn receive_nft(deps: DepsMut, info: MessageInfo, rcv: Cw721ReceiveMsg) -> Result
 /// nothing over `token_ids`: an id that isn't currently escrowed fails the whole call, so a typo
 /// can't silently unlock a different set than the admin intended.
 fn emergency_unlock(deps: DepsMut, info: MessageInfo, token_ids: Vec<u32>) -> Result<Response, ContractError> {
-    if info.sender != ADMIN.load(deps.storage)? {
-        return Err(ContractError::Unauthorized);
-    }
+    ensure_admin(deps.as_ref(), &info)?;
     let cw721 = CW721.load(deps.storage)?;
 
     let mut msgs = Vec::with_capacity(token_ids.len());
@@ -183,6 +184,20 @@ fn emergency_unlock(deps: DepsMut, info: MessageInfo, token_ids: Vec<u32>) -> Re
         .add_attribute("action", "emergency_unlock")
         .add_attribute("count", token_ids.len().to_string())
         .add_messages(msgs))
+}
+
+fn renounce_admin(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
+    ensure_admin(deps.as_ref(), &info)?;
+    ADMIN.remove(deps.storage);
+    Ok(Response::new().add_attribute("action", "renounce_admin"))
+}
+
+// a renounced admin is gone from storage, so nobody passes
+fn ensure_admin(deps: Deps, info: &MessageInfo) -> Result<(), ContractError> {
+    match ADMIN.may_load(deps.storage)? {
+        Some(admin) if admin == info.sender => Ok(()),
+        _ => Err(ContractError::Unauthorized),
+    }
 }
 
 /// Only reachable while a contract admin exists, i.e. test deployments. Production is instantiated with no admin.
@@ -413,5 +428,29 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err, ContractError::NotEscrowed(404));
+    }
+
+    #[test]
+    fn renounce_admin() {
+        let (mut deps, cw721, admin) = setup();
+        execute(deps.as_mut(), mock_env(), message_info(&cw721, &[]), rcv("1", &[1; 20])).unwrap();
+
+        let stranger = deps.api.addr_make("stranger");
+        let err = execute(deps.as_mut(), mock_env(), message_info(&stranger, &[]), ExecuteMsg::RenounceAdmin {}).unwrap_err();
+        assert_eq!(err, ContractError::Unauthorized);
+
+        execute(deps.as_mut(), mock_env(), message_info(&admin, &[]), ExecuteMsg::RenounceAdmin {}).unwrap();
+
+        // former admin can no longer unlock or renounce again
+        let err = execute(
+            deps.as_mut(),
+            mock_env(),
+            message_info(&admin, &[]),
+            ExecuteMsg::EmergencyUnlock { token_ids: vec![1] },
+        )
+        .unwrap_err();
+        assert_eq!(err, ContractError::Unauthorized);
+        let err = execute(deps.as_mut(), mock_env(), message_info(&admin, &[]), ExecuteMsg::RenounceAdmin {}).unwrap_err();
+        assert_eq!(err, ContractError::Unauthorized);
     }
 }
