@@ -27,6 +27,7 @@ Settings (copy `.env.example` to `.env.local`):
 | `VITE_DEPLOYMENT` | Which preset in `src/config/deployments.ts` to build: `reece-test`, `badkids` or `demo`. **Required** for a production build, which fails without it (a missing value used to ship reece-test silently). Dev falls back to `reece-test`. |
 | `VITE_ALLOW_DEMO` | `1` makes a production build honour `?demo`. Only for test builds; leave it unset for a real site. |
 | `VITE_WC_PROJECT_ID` | Reown (WalletConnect) project id. Without it only extension wallets and Coinbase Wallet are offered. The project's allowlist has to include the site's origin. |
+| `VITE_ARTIFACT_PROXY_URL` | Where "Prove it yourself" sends Succinct artifact uploads/downloads. `/api` on Vercel (see Hosting). Dev defaults to the local `pnpm artifact-proxy`. A prod build without it can't prove. |
 
 ## Deployments
 
@@ -93,6 +94,26 @@ Cross-Origin-Resource-Policy: same-origin
 Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), hid=(), serial=(), bluetooth=(), browsing-topics=()
 Cache-Control: no-cache (index.html); public, max-age=31536000, immutable (assets/*)
 ```
+
+### Vercel + the artifact proxy
+
+Succinct's S3 bucket has no CORS, so the browser can't upload the stdin/ELF or download the proof itself. `api/upload.ts` and `api/download.ts` are Vercel functions that do it server side (same thing as `scripts/artifact-proxy.mjs`, which is local only). They only forward to `spn-artifacts-mainnet.s3[.<region>].amazonaws.com`.
+
+TODO before launch:
+
+- [ ] Vercel project root dir = `ui`
+- [ ] env `VITE_DEPLOYMENT=badkids` and `VITE_ARTIFACT_PROXY_URL=/api` (no trailing slash)
+- [ ] preview deploy with `reece-test`, run "Prove it yourself" once end to end. The bucket hostname came from a comment, not a real proof URL, so this is the actual check
+
+#### If proving breaks on the live site
+
+- **"browsers can't upload to Succinct's artifact bucket"** - the request never reached anything. `VITE_ARTIFACT_PROXY_URL` wasn't set at build time. It's baked in by Vite, so set it and **redeploy**, changing the env alone does nothing
+- **`artifact upload: HTTP 403` / `proof download: HTTP 403`** - open devtools Network, find the `/api/upload` or `/api/download` call
+  - body says `refusing to proxy to <host>` - Succinct handed back a host the allowlist doesn't match. Fix the `ALLOWED_HOST` regex in both `api/*.ts`
+  - body is S3 XML `AccessDenied` - it reached S3, the presigned url is bad or expired. Not the proxy
+- **HTTP 404 on `/api/...`** - functions didn't deploy. Usually the root dir isn't `ui`, check the Functions tab in Vercel
+- **HTTP 413** - body over Vercel's 4.5 MB limit. Shouldn't happen (ELF is ~470 KB) unless the program changed
+- Function logs are in Vercel under the deployment -> Logs. Locally you can sanity check with `pnpm artifact-proxy` + `pnpm dev`
 
 ## How it's built
 

@@ -54,3 +54,4 @@ Eureka light client: `0x4bB8A05D5b40dF7a3B97770E1943461B681B62E9`
 - Escrow with `--no-admin`
 - Audit `parse()` and the escrow receive path, fuzz more
 - Rotate the prover key, it leaked into a chat log
+- Set up Vercel with the artifact proxy, or "Prove it yourself" won't work. See `ui/README.md` Hosting

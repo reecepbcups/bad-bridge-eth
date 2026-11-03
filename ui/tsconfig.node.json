@@ -21,5 +21,5 @@
     "noEmit": true,
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.node.tsbuildinfo"
   },
-  "include": ["vite.config.ts", "vitest.config.ts", "vitest.live.config.ts", "vitest.fork.config.ts", "playwright.config.ts", "eslint.config.js", "e2e", "e2e-live", "scripts"]
+  "include": ["vite.config.ts", "vitest.config.ts", "vitest.live.config.ts", "vitest.fork.config.ts", "playwright.config.ts", "eslint.config.js", "e2e", "e2e-live", "scripts", "api"]
 }
