@@ -229,7 +229,7 @@ Recommendation: **hold**, with `admin: None` making it functionally equivalent t
 - The cw721 address lives in a `cw-storage-plus` `Item` under key `"cw721"`. It can't collide with records because it doesn't start with `b`.
 - `Cw721ReceiveMsg` is inlined, so we don't pin a cw721 version.
 - Added a `Config {}` query. `Pending` caps at 500 per page.
-- There's a no-op `migrate` entry point so test deploys can be upgraded. Production still gets `admin: None`, so nobody can reach it.
+- There's no `migrate` entry point, so even a deploy that forgot `admin: None` can't be upgraded. Test deploys just redeploy.
 
 ---
 

@@ -75,6 +75,8 @@ contract BadBridge is ERC721, ERC721Votes, ERC2981, Ownable2Step {
     uint96 public constant MAX_ROYALTY_BPS = 1000;
 
     IRouter public immutable ROUTER;
+    /// @notice Resolved from ROUTER once at deploy, so a later router migration can't swap in another client
+    ISP1ICS07Tendermint public immutable CLIENT;
     /// @notice raw 32-byte escrow contract address on Cosmos Hub
     bytes32 public immutable ESCROW;
     string public clientId;
@@ -114,6 +116,7 @@ contract BadBridge is ERC721, ERC721Votes, ERC2981, Ownable2Step {
     {
         ROUTER = router;
         clientId = clientId_;
+        CLIENT = ISP1ICS07Tendermint(router.getClient(clientId_));
         ESCROW = escrow;
         baseURI = baseURI_;
         _setRoyalty(royaltyReceiver, royaltyBps);
@@ -137,7 +140,7 @@ contract BadBridge is ERC721, ERC721Votes, ERC2981, Ownable2Step {
     }
 
     function lightClient() public view returns (ISP1ICS07Tendermint) {
-        return ISP1ICS07Tendermint(ROUTER.getClient(clientId));
+        return CLIENT;
     }
 
     /// @notice Records every escrow entry proven by `sp1Proof` at `proofHeight`. Anyone can call it.

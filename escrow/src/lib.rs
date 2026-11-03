@@ -200,12 +200,6 @@ fn ensure_admin(deps: Deps, info: &MessageInfo) -> Result<(), ContractError> {
     }
 }
 
-/// Only reachable while a contract admin exists, i.e. test deployments. Production is instantiated with no admin.
-#[entry_point]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: cosmwasm_std::Empty) -> StdResult<Response> {
-    Ok(Response::new())
-}
-
 #[entry_point]
 pub fn query(deps: Deps, _env: Env, msg: QueryMsg) -> StdResult<Binary> {
     match msg {

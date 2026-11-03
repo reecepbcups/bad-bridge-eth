@@ -19,12 +19,12 @@ abstract contract BadBridgeBase is Test {
     BadBridge.ConsensusState cs;
 
     function setUp() public virtual {
+        vm.mockCall(ROUTER, abi.encodeCall(IRouter.getClient, ("cosmoshub-0")), abi.encode(CLIENT));
         bridge = new BadBridge(
             IRouter(ROUTER), "cosmoshub-0", ESCROW, "Bad Kids", "BADKIDS", "ipfs://x/", OWNER, ROYALTY, ROYALTY_BPS, "ipfs://c"
         );
         cs = BadBridge.ConsensusState({ timestamp: 1, root: keccak256("root"), nextValidatorsHash: bytes32(0) });
 
-        vm.mockCall(ROUTER, abi.encodeCall(IRouter.getClient, ("cosmoshub-0")), abi.encode(CLIENT));
         vm.mockCall(CLIENT, abi.encodeCall(ISP1ICS07Tendermint.getConsensusStateHash, (HEIGHT)), abi.encode(keccak256(abi.encode(cs))));
         vm.mockCall(CLIENT, abi.encodeCall(ISP1ICS07Tendermint.MEMBERSHIP_PROGRAM_VKEY, ()), abi.encode(VKEY));
         vm.mockCall(CLIENT, abi.encodeCall(ISP1ICS07Tendermint.VERIFIER, ()), abi.encode(VERIFIER));
