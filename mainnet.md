@@ -58,7 +58,7 @@ Royalty isn't in the json on purpose, the contract does ERC2981. Owner can chang
 CW721=cosmos12gsv9tmjhhg86wg9fnd9cnju28jx3fxva9cn8dh9meketkfxxajqmg3exz
 ```
 
-Admin (for EmergencyUnlock) stays `cosmos1reece3m8g4m3d0qrpj93rnnseudnpzhrey64rr` unless we decide otherwise. It's `--no-admin` on the wasm side so nobody can migrate it.
+Admin (for EmergencyUnlock) stays `cosmos1reece3m8g4m3d0qrpj93rnnseudnpzhrey64rr` until it's renounced after the smoke test. It's `--no-admin` on the wasm side so nobody can migrate it.
 
 ```bash
 gaiad tx wasm store escrow/artifacts/bad_bridge_escrow.wasm \
@@ -115,9 +115,17 @@ Then update the Deployments section in `README.md`.
 2. If the Eureka client is stale, send a little ATOM over Eureka to nudge it (~10 min)
 3. Wait for the batcher to submit
 4. `claim(id)` and check `ownerOf`, `tokenURI` and `royaltyInfo`
+5. Renounce the escrow admin. While it's alive an `EmergencyUnlock` can put the same kid on both chains, even one with no `Proven` event yet, since any old Eureka root still proves the record. Don't unlock the smoke test kid, just renounce
+
+```bash
+gaiad tx wasm execute <escrow cosmos1...> '{"renounce_admin":{}}' \
+  --from income --chain-id cosmoshub-4 --gas auto --gas-adjustment 1.3 --gas-prices 0.005uatom \
+  --node https://cosmos-rpc.polkachu.com:443 -y
+```
+
+Run it again, it should fail with `unauthorized`. That means the admin is gone.
 
 ## Open
 
 - Safe address?
 - Royalty to the Safe or somewhere else?
-- Escrow admin stays reece's key or moves to a Hub multisig?

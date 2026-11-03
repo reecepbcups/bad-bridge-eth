@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 50d724803a8f2d38d36d3a98b7db864b5cc7daf81a0f1cfd2dfdc8d821200da1 # shrinks to ops = [Receive { caller: Cw721, sender: 0, token_id: "5", recipient: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1] }, Unlock { caller: Admin, ids: [5, 0] }]

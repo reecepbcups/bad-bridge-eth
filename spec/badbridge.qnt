@@ -7,6 +7,8 @@ module badbridge {
   const SUPERVISOR_MINTS: bool
   // escrow only accepts token ids in canonical u32 form (fix for "+1" / "01")
   const CANONICAL_CHECK: bool
+  // escrow admin not renounced yet, so EmergencyUnlock is live
+  const UNLOCK_ADMIN: bool
 
   pure val NONE = ""
   pure val ESCROW = "escrow"
@@ -25,6 +27,8 @@ module badbridge {
   // Hub
   var hubOwner: str -> str
   var record: int -> str
+  // escrow refund address per id, what EmergencyUnlock sends back to
+  var senderOf: int -> str
   // Hub roots the Eureka client accepted, each one a snapshot of the escrow records
   var roots: List[int -> str]
   // Ethereum
@@ -36,6 +40,7 @@ module badbridge {
   action init = all {
     hubOwner' = Map("1" -> "alice", "2" -> "bob", "+1" -> NONE),
     record' = IDS.mapBy(_ => NONE),
+    senderOf' = IDS.mapBy(_ => NONE),
     roots' = [],
     proven' = IDS.mapBy(_ => NONE),
     ethOwner' = IDS.mapBy(_ => NONE),
@@ -46,7 +51,7 @@ module badbridge {
     hubOwner.get(s) != NONE,
     hubOwner.get(s) != ESCROW,
     hubOwner' = hubOwner.set(s, dest),
-    record' = record, roots' = roots, proven' = proven, ethOwner' = ethOwner, mintedTo' = mintedTo,
+    record' = record, senderOf' = senderOf, roots' = roots, proven' = proven, ethOwner' = ethOwner, mintedTo' = mintedTo,
   }
 
   // cw721 send_nft into the escrow, ReceiveNft hook checks
@@ -58,6 +63,7 @@ module badbridge {
     record.get(parseId(s)) == NONE,
     hubOwner' = hubOwner.set(s, ESCROW),
     record' = record.set(parseId(s), recipient),
+    senderOf' = senderOf.set(parseId(s), hubOwner.get(s)),
     roots' = roots, proven' = proven, ethOwner' = ethOwner, mintedTo' = mintedTo,
   }
 
@@ -65,7 +71,7 @@ module badbridge {
   action clientUpdate: bool = all {
     roots.length() < 4,
     roots' = roots.append(record),
-    hubOwner' = hubOwner, record' = record, proven' = proven, ethOwner' = ethOwner, mintedTo' = mintedTo,
+    hubOwner' = hubOwner, record' = record, senderOf' = senderOf, proven' = proven, ethOwner' = ethOwner, mintedTo' = mintedTo,
   }
 
   // anyone can submit, any accepted root, any subset of what that root holds
@@ -74,7 +80,7 @@ module badbridge {
     ids != Set(),
     ids.forall(t => roots[i].get(t) != NONE),
     proven' = IDS.mapBy(t => if (ids.contains(t) and proven.get(t) == NONE) roots[i].get(t) else proven.get(t)),
-    hubOwner' = hubOwner, record' = record, roots' = roots, ethOwner' = ethOwner, mintedTo' = mintedTo,
+    hubOwner' = hubOwner, record' = record, senderOf' = senderOf, roots' = roots, ethOwner' = ethOwner, mintedTo' = mintedTo,
   }
 
   action claim(t: int): bool = all {
@@ -82,21 +88,21 @@ module badbridge {
     ethOwner.get(t) == NONE,
     ethOwner' = ethOwner.set(t, proven.get(t)),
     mintedTo' = mintedTo.set(t, proven.get(t)),
-    hubOwner' = hubOwner, record' = record, roots' = roots, proven' = proven,
+    hubOwner' = hubOwner, record' = record, senderOf' = senderOf, roots' = roots, proven' = proven,
   }
 
   action ethTransfer(t: int, dest: str): bool = all {
     ethOwner.get(t) != NONE,
     dest != ZERO,
     ethOwner' = ethOwner.set(t, dest),
-    hubOwner' = hubOwner, record' = record, roots' = roots, proven' = proven, mintedTo' = mintedTo,
+    hubOwner' = hubOwner, record' = record, senderOf' = senderOf, roots' = roots, proven' = proven, mintedTo' = mintedTo,
   }
 
   action supervisorMintAlias: bool = all {
     SUPERVISOR_MINTS,
     hubOwner.get("+1") == NONE,
     hubOwner' = hubOwner.set("+1", ATTACKER),
-    record' = record, roots' = roots, proven' = proven, ethOwner' = ethOwner, mintedTo' = mintedTo,
+    record' = record, senderOf' = senderOf, roots' = roots, proven' = proven, ethOwner' = ethOwner, mintedTo' = mintedTo,
   }
 
   // migrated cw721 code calls ReceiveNft without moving the kid
@@ -105,6 +111,7 @@ module badbridge {
     record.get(t) == NONE,
     recipient != ZERO,
     record' = record.set(t, recipient),
+    senderOf' = senderOf.set(t, ATTACKER),
     hubOwner' = hubOwner, roots' = roots, proven' = proven, ethOwner' = ethOwner, mintedTo' = mintedTo,
   }
 
@@ -113,7 +120,19 @@ module badbridge {
     ADMIN_MIGRATES,
     hubOwner.get(s) == ESCROW,
     hubOwner' = hubOwner.set(s, ATTACKER),
-    record' = record, roots' = roots, proven' = proven, ethOwner' = ethOwner, mintedTo' = mintedTo,
+    record' = record, senderOf' = senderOf, roots' = roots, proven' = proven, ethOwner' = ethOwner, mintedTo' = mintedTo,
+  }
+
+  // EmergencyUnlock: clears the record and hands the kid back to whoever sent it.
+  // The admin follows the lib.rs doc and only unlocks kids with no Proven event on Ethereum yet.
+  action adminUnlock(t: int): bool = all {
+    UNLOCK_ADMIN,
+    record.get(t) != NONE,
+    proven.get(t) == NONE,
+    hubOwner' = hubOwner.set(canon(t), senderOf.get(t)),
+    record' = record.set(t, NONE),
+    senderOf' = senderOf.set(t, NONE),
+    roots' = roots, proven' = proven, ethOwner' = ethOwner, mintedTo' = mintedTo,
   }
 
   action step = {
@@ -133,6 +152,7 @@ module badbridge {
       supervisorMintAlias,
       adminPull(s),
       adminForgeRecord(t, recipient),
+      adminUnlock(t),
     }
   }
 
@@ -158,17 +178,51 @@ module badbridge {
   val witnessNotAllMinted = IDS.exists(t => ethOwner.get(t) == NONE)
 }
 
-// What we ship: canonical ids, no cw721 admin. Should hold.
+// What we ship: canonical ids, no cw721 admin, escrow admin renounced. Should hold.
 module prod {
-  import badbridge(ADMIN_MIGRATES = false, SUPERVISOR_MINTS = true, CANONICAL_CHECK = true).*
+  import badbridge(ADMIN_MIGRATES = false, SUPERVISOR_MINTS = true, CANONICAL_CHECK = true, UNLOCK_ADMIN = false).*
 }
 
 // Bad Kids on the Hub today: a single key is cw721 admin. Should break noDoubleSpend.
 module today {
-  import badbridge(ADMIN_MIGRATES = true, SUPERVISOR_MINTS = true, CANONICAL_CHECK = true).*
+  import badbridge(ADMIN_MIGRATES = true, SUPERVISOR_MINTS = true, CANONICAL_CHECK = true, UNLOCK_ADMIN = false).*
 }
 
 // Pre fix escrow that took "+1" as 1. Should break noDoubleSpend.
 module noCanonicalCheck {
-  import badbridge(ADMIN_MIGRATES = false, SUPERVISOR_MINTS = true, CANONICAL_CHECK = false).*
+  import badbridge(ADMIN_MIGRATES = false, SUPERVISOR_MINTS = true, CANONICAL_CHECK = false, UNLOCK_ADMIN = false).*
+}
+
+// Escrow admin still live, and only unlocks unproven kids like the doc says. Still breaks noDoubleSpend,
+// because a root taken before the unlock proves the old record forever.
+module adminLive {
+  import badbridge(ADMIN_MIGRATES = false, SUPERVISOR_MINTS = true, CANONICAL_CHECK = true, UNLOCK_ADMIN = true).*
+
+  // Bob bridges kid 2, a root lands, admin sees no Proven event and refunds him.
+  // The old root still proves the record, so anyone mints kid 2 on Ethereum while Bob holds it on the Hub.
+  run doubleSpendAfterHonestUnlock =
+    init
+      .then(sendToEscrow("2", "bob"))
+      .then(clientUpdate)
+      .then(adminUnlock(2))
+      .then(submitBatch(0, Set(2)))
+      .then(claim(2))
+      .then(all { assert(not(noDoubleSpend)), assert(hubOwner.get("2") == "bob" and ethOwner.get(2) == "bob"), step })
+
+  // Same start, but Bob sells the refunded kid to Alice, who bridges it to herself.
+  // Bob replays the old root first. Alice's kid is locked in the escrow and Bob gets it on Ethereum.
+  run theftAfterHonestUnlock =
+    init
+      .then(sendToEscrow("2", "bob"))
+      .then(clientUpdate)
+      .then(adminUnlock(2))
+      .then(hubTransfer("2", "alice"))
+      .then(sendToEscrow("2", "alice"))
+      .then(submitBatch(0, Set(2)))
+      .then(claim(2))
+      .then(all {
+        assert(not(mintedToRecord)),
+        assert(record.get(2) == "alice" and hubOwner.get("2") == ESCROW and ethOwner.get(2) == "bob"),
+        step,
+      })
 }

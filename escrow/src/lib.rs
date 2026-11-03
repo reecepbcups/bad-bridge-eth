@@ -58,10 +58,11 @@ pub struct Cw721ReceiveMsg {
 pub enum ExecuteMsg {
     ReceiveNft(Cw721ReceiveMsg),
     /// Admin-only. Returns the given escrowed tokens to the Cosmos address that sent them,
-    /// bypassing the Ethereum leg entirely. The caller must confirm off-chain (e.g. against
-    /// BadBridge.sol's `Proven` events) that none of the listed token ids were already proven
-    /// there: a proof submitted before this call can still be claimed on Ethereum after the
-    /// refund, minting the same token twice across chains.
+    /// bypassing the Ethereum leg entirely. Only safe if the Eureka client stored no Hub root
+    /// since the token was sent. Checking BadBridge.sol's `Proven` events isn't enough: any
+    /// stored root still proves the old record after the refund, minting the same token twice
+    /// across chains (see `adminLive` in spec/badbridge.qnt). The refund goes to whoever called
+    /// send_nft, which can be an approved operator instead of the owner.
     EmergencyUnlock { token_ids: Vec<u32> },
     /// Admin-only. Permanently removes the admin, disabling EmergencyUnlock forever.
     RenounceAdmin {},
@@ -198,12 +199,6 @@ fn ensure_admin(deps: Deps, info: &MessageInfo) -> Result<(), ContractError> {
         Some(admin) if admin == info.sender => Ok(()),
         _ => Err(ContractError::Unauthorized),
     }
-}
-
-/// Only reachable while a contract admin exists, i.e. test deployments. Production is instantiated with no admin.
-#[entry_point]
-pub fn migrate(_deps: DepsMut, _env: Env, _msg: cosmwasm_std::Empty) -> StdResult<Response> {
-    Ok(Response::new())
 }
 
 #[entry_point]

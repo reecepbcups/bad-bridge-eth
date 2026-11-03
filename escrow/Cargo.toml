@@ -22,3 +22,6 @@ cosmwasm-std = "2.1"
 cosmwasm-schema = "2.1"
 cw-storage-plus = "2.0"
 thiserror = "1"
+
+[dev-dependencies]
+proptest = "1"

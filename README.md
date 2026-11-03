@@ -22,6 +22,33 @@ Metadata doesn't move. `tokenURI` is `baseURI + id`, same IPFS folder as the Hub
 |bridge (`BadBridge.sol`)|`eth/`|
 |batcher (Rust)|`batcher/service/`|
 
+## Checking it
+
+Unit + fuzz tests:
+
+```bash
+cd escrow && cargo test        # tests/fuzz.rs runs random callers against a reference model
+cd eth && forge test           # test/Access.t.sol is the who-can-call-what part, invariants are slow (~10 min)
+```
+
+Quint specs live in `spec/`. Each one has a prod module that should hold, plus a broken variant that should fail, so you know the invariants actually bite.
+
+|Spec|What|Should hold|Should break|
+|-|-|-|-|
+|`escrow.qnt`|escrow entry points|`escrowProd`|`escrowNoGuards`|
+|`bridge.qnt`|BadBridge.sol entry points|`bridgeProd`|`bridgeNoGuards`, `bridgeUnpinned`|
+|`badbridge.qnt`|both chains together|`prod`|`today`, `noCanonicalCheck`, `adminLive`|
+
+```bash
+cd spec
+quint run escrow.qnt --main=escrowProd --invariant=safety --max-samples=100000 --max-steps=30
+quint run bridge.qnt --main=bridgeProd --invariant=safety --max-samples=100000 --max-steps=30
+quint run badbridge.qnt --main=prod --invariant=safety --max-samples=50000
+quint verify escrow.qnt --main=escrowProd --invariant=safety --max-steps=6   # apalache, bounded
+```
+
+`adminLive` in `badbridge.qnt` has two scripted exploits, run them with `quint test badbridge.qnt --main=adminLive --match=AfterHonestUnlock`.
+
 ## Deployments
 
 Eureka light client: `0x4bB8A05D5b40dF7a3B97770E1943461B681B62E9`
