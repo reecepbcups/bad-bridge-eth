@@ -115,7 +115,7 @@ Then update the Deployments section in `README.md`.
 2. If the Eureka client is stale, send a little ATOM over Eureka to nudge it (~10 min)
 3. Wait for the batcher to submit
 4. `claim(id)` and check `ownerOf`, `tokenURI` and `royaltyInfo`
-5. Renounce the escrow admin. While it's alive the admin can `EmergencyUnlock` a kid that's already proven on Ethereum, so the same kid lives on both chains
+5. Renounce the escrow admin. While it's alive an `EmergencyUnlock` can put the same kid on both chains, even one with no `Proven` event yet, since any old Eureka root still proves the record. Don't unlock the smoke test kid, just renounce
 
 ```bash
 gaiad tx wasm execute <escrow cosmos1...> '{"renounce_admin":{}}' \
