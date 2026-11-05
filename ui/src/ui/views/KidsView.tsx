@@ -49,6 +49,7 @@ export function KidsView({ address, mode }: { address?: string; mode: KidsMode }
   const prove = useProveFlow(() => trips.refetch())
   // kids claimed from this page, kept here: a claim can re-key the list and remount its rows
   const [claimed, setClaimed] = useState<readonly KidId[]>([])
+  const heading = useRef<HTMLHeadingElement>(null)
   const claim: ClaimFlow = {
     ...flow,
     run: (ids) => {
@@ -64,6 +65,7 @@ export function KidsView({ address, mode }: { address?: string; mode: KidsMode }
   const all = trips.data ?? []
   const onBridge = all.filter((t) => t.stage !== 'home-eth' && t.stage !== 'home-hub')
   const list = mode === 'crossing' ? onBridge : all.filter((t) => t.stage === 'home-eth')
+  useFocusWhenDone(flow.pending, mode === 'crossing' && claimed.length > 0 && claimed.every((id) => !list.some((t) => t.tokenId === id)), heading)
   const ready = list.filter((t) => t.stage === 'ready')
   const claimableNow = ready.slice(0, CLAIM_BATCH_CAP)
   const crossingTrips = list.filter((t) => inFlight(t.stage))
@@ -97,13 +99,13 @@ export function KidsView({ address, mode }: { address?: string; mode: KidsMode }
     <Card>
       {opensea ? (
         <div className="row start">
-          <h2 tabIndex={-1}>{title}</h2>
+          <h2 tabIndex={-1} ref={heading}>{title}</h2>
           <ExtLink className="btn ghost small" href={opensea}>
             OpenSea
           </ExtLink>
         </div>
       ) : (
-        <h2 tabIndex={-1}>{title}</h2>
+        <h2 tabIndex={-1} ref={heading}>{title}</h2>
       )}
       <p className="lede">
         {crossingView

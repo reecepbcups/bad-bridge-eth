@@ -1,4 +1,4 @@
-import { useConfigSanity, useHealth } from '../../trips/hooks'
+import { describeConfigProblem, useConfigSanity, useHealth } from '../../trips/hooks'
 import type { ConfigProblem } from '../../trips/types'
 import { shortAddress } from '../format'
 import './Banners.css'
@@ -26,12 +26,12 @@ export function Banners() {
         <div className="banner bad" role="alert">
           <b>Sending is switched off</b>
           <span>
-            The bridge contracts don't match this site's settings, so nothing can be sent until that's fixed. Your kids are safe.
+            The bridge's send checks found a problem. New deposits are disabled until it is resolved.
             {/* COPY: config mismatch banner */}
           </span>
           <ul>
-            {problems.map((p) => (
-              <li key={p.code}>{describe(p)}</li>
+            {problems.map((p, i) => (
+              <li key={`${p.code}-${i}`}>{describe(p)}</li>
             ))}
           </ul>
         </div>
@@ -43,6 +43,9 @@ export function Banners() {
 function describe(p: ConfigProblem): string {
   if (p.message) return p.message
   switch (p.code) {
+    case 'ClientUnavailable':
+    case 'EscrowAdmin':
+      return describeConfigProblem(p)
     case 'EscrowCollection':
       return `The escrow accepts ${shortAddress(p.actual)}, but this site expects ${shortAddress(p.expected)}.`
     case 'BridgeEscrow':

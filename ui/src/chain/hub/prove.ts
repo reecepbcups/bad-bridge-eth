@@ -62,7 +62,12 @@ export async function proveAt(t: Transport, height: number, key: Uint8Array): Pr
       const response = isRecord(result) && isRecord(result.response) ? result.response : null
       if (!response) throw new EndpointError(`${base} abci_query: no response`)
       const code = typeof response.code === 'number' ? response.code : 0
-      if (code !== 0) throw new ChainError(typeof response.log === 'string' ? response.log : `abci code ${code}`, code)
+      if (code !== 0) {
+        const log = typeof response.log === 'string' ? response.log : `abci code ${code}`
+        // Historical state availability differs by node; an archive fallback may still have this height.
+        if (/pruned|version does not exist|height .*not available/i.test(log)) throw new EndpointError(log)
+        throw new ChainError(log, code)
+      }
 
       const value = typeof response.value === 'string' ? fromBase64(response.value) : new Uint8Array()
       if (value.length === 0) return null

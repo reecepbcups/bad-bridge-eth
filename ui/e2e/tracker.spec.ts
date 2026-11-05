@@ -6,30 +6,25 @@ import { BRIDGE, DEMO, DEMO_ETH, DEMO_OFF, OTHER_HUB, skipAhead, trackErrors } f
 test('look up an address, then claim everything that is ready in one tx', async ({ page, context }) => {
   const errors = trackErrors(page)
   await context.grantPermissions(['clipboard-read', 'clipboard-write'])
-  await page.goto(`${DEMO_OFF}#/kids`)
+  await page.goto(`${DEMO_OFF}#/crossing`)
   await expect(page.getByText('Who are we looking for?')).toBeVisible()
 
   // lowercase works; the URL gets the checksummed form
   await page.getByLabel('Ethereum address, Hub address or kid number').fill(DEMO_ETH.toLowerCase())
   await page.getByRole('button', { name: 'Look up' }).click()
-  await expect(page).toHaveURL(new RegExp(`#/kids/${DEMO_ETH}$`))
-  await expect(page.getByRole('heading', { level: 2, name: 'Kids for 0x8f3a…c21d' })).toBeVisible()
+  await expect(page).toHaveURL(new RegExp(`#/crossing/${DEMO_ETH}$`))
+  await expect(page.getByRole('heading', { level: 2, name: 'Crossing for 0x8f3a…c21d' })).toBeVisible()
 
   const list = page.getByRole('list', { name: 'Kids on the bridge' })
   const row = (id: number) => list.getByRole('listitem').filter({ hasText: `#${id}` }).first()
   await expect(row(9254).getByText('ready to claim', { exact: true })).toBeVisible()
   await expect(row(8783).getByText('crossing', { exact: true })).toBeVisible()
-  await expect(row(8073).getByText('home on Ethereum', { exact: true })).toBeVisible()
+  await expect(row(8073)).toHaveCount(0)
   await expect(row(8783)).toContainText('Sent 22 min ago · Ethereum caught up, now being proven')
   await expect(row(9254)).toContainText('Sent Sep 26, 9:12 pm')
-  await expect(row(8073).getByRole('link', { name: 'View #8073 on Etherscan' })).toHaveAttribute(
-    'href',
-    `https://etherscan.io/nft/${BRIDGE}/8073`,
-  )
 
   // what's happening, in detail
-  await row(8783).getByText("What's happening?").click()
-  await expect(row(8783).locator('[aria-current="step"]')).toContainText('Proven')
+  await expect(page.locator('[aria-current="step"]')).toContainText('Proving')
 
   // the proof for #8783 lands: two ready, one tx claims both
   await skipAhead(page)
@@ -37,14 +32,17 @@ test('look up an address, then claim everything that is ready in one tx', async 
   await page.getByRole('button', { name: 'Claim both' }).click()
   // no Ethereum wallet yet: the sheet asks for one first
   await page.getByRole('dialog', { name: 'Connect Ethereum' }).getByRole('button', { name: 'Connect MetaMask' }).click()
-  await expect(page.getByRole('heading', { level: 2, name: 'My kids' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 2, name: 'Crossing', exact: true })).toBeVisible()
   // the connect button became the real Claim button: focus follows it instead of dropping to <body>
   await expect(page.getByRole('button', { name: 'Claim both' })).toBeFocused()
   await page.getByRole('button', { name: 'Claim both' }).click()
-  await expect(page.getByText('3 home', { exact: true })).toBeVisible()
+  await expect(page.getByText('Nothing crossing for this address')).toBeVisible()
   await expect(page.getByRole('status').getByText('Claimed #8783 & #9254')).toBeVisible()
   await expect(page.getByRole('button', { name: /Claim/ })).toHaveCount(0)
 
+  await page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'My Eth kids' }).click()
+  for (const id of [8073, 8783, 9254]) await expect(row(id).getByText('home on Ethereum', { exact: true })).toBeVisible()
+  await expect(row(8073).getByRole('link', { name: 'View #8073 on Etherscan' })).toHaveAttribute('href', `https://etherscan.io/nft/${BRIDGE}/8073`)
   // share link
   await page.getByRole('button', { name: 'Copy share link' }).click()
   await expect(page.getByRole('button', { name: 'Copied!' })).toBeVisible()
@@ -64,9 +62,10 @@ test('look up by Hub address and by kid number', async ({ page }) => {
 
   await box.fill(OTHER_HUB)
   await page.getByRole('button', { name: 'Look up' }).click()
-  await expect(page.getByRole('heading', { level: 2, name: 'Kids for cosmos1qa3…lqk8' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 2, name: 'Eth kids for cosmos1qa3…lqk8' })).toBeVisible()
   await expect(page.getByText('Every kid this Hub address sent', { exact: false })).toBeVisible()
-  for (const id of [9254, 8783, 1234, 42]) await expect(page.getByRole('link', { name: `#${id}`, exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: '#1234', exact: true })).toBeVisible()
+  for (const id of [9254, 8783, 42]) await expect(page.getByRole('link', { name: `#${id}`, exact: true })).toHaveCount(0)
 
   await box.fill('#1234')
   await page.getByRole('button', { name: 'Look up' }).click()
@@ -84,12 +83,12 @@ test('a bad address in the URL says so instead of searching', async ({ page }) =
 
 test('an address with nothing on the bridge gets an empty state', async ({ page }) => {
   await page.goto(`${DEMO}#/kids/0xfB6916095ca1df60bB79Ce92cE3Ea74c37c5d359`)
-  await expect(page.getByText('No kids on the bridge for this address')).toBeVisible()
+  await expect(page.getByText('No kids home on Ethereum for this address')).toBeVisible()
 })
 
 test('network trouble shows a friendly error with a retry', async ({ page }) => {
   await page.goto(`${DEMO}#/kid/8783`)
-  await expect(page.getByText('crossing', { exact: true })).toBeVisible()
+  await expect(page.locator('.kid-head').getByText('crossing', { exact: true })).toBeVisible()
   await page.evaluate(() => window.badBridgeDemo?.setOffline(true))
   // same page, new route: this kid's reads all fail
   await page.getByRole('navigation', { name: 'Demo controls' }).getByRole('link', { name: 'about' }).click()
@@ -114,11 +113,11 @@ test('a single kid page works for anyone, with its facts and a claim button', as
   await expect(page.getByText('Anyone can claim; it always goes to 0x5aAe…eAed.')).toBeVisible()
 })
 
-test('stuck prover: after 30 minutes proving, a calm note, and the README second', async ({ page }) => {
+test('stuck prover: after 30 minutes proving, explains why the kid is waiting', async ({ page }) => {
   const start = new Date('2026-09-27T17:00:00Z')
   await page.clock.setFixedTime(start)
   await page.goto(`${DEMO}#/kid/8783`)
-  await expect(page.locator('[aria-current="step"]')).toContainText('Proven')
+  await expect(page.locator('[aria-current="step"]')).toContainText('Proving')
   // just seen: no clock yet
   await expect(page.getByText('Seen proving on this device')).toHaveCount(0)
   await page.clock.setFixedTime(new Date(start.getTime() + 6 * 60_000))
@@ -130,7 +129,7 @@ test('stuck prover: after 30 minutes proving, a calm note, and the README second
   await page.clock.setFixedTime(new Date(start.getTime() + 31 * 60_000))
   await page.evaluate(() => window.badBridgeDemo?.advance(0))
   await expect(page.getByText('This kid is safe in the escrow and will cross when a prover picks it up.', { exact: false })).toBeVisible()
-  await expect(page.getByRole('link', { name: /^run a prover yourself/ })).toHaveAttribute('href', 'https://github.com/reecepbcups/bad-bridge#readme')
+  await expect(page.locator('[aria-current="step"]')).toContainText('Proving')
 })
 
 test('About lists the contracts from the deployment, with live health', async ({ page }) => {

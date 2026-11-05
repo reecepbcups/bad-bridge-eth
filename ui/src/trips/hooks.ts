@@ -24,7 +24,7 @@ import { isLive } from '../config/deployments'
 import { compareTrips, isFinal } from './derive'
 import { idsKey, isKidId, discoverTrips, loadHealth, loadOwned, loadTrips, seededTrip, sortOwned, type Ctx, type WithError } from './load'
 import { keys, LIVE_POLL_MS, POLL_MS, type TripQueryKey } from './keys'
-import { checkConfig, notLive } from './sanity'
+import { notLive, readSendSanity } from './sanity'
 import { loadTrustFacts, type TrustFacts } from './trust'
 import { rememberedTrips, rememberTrips, subscribeRemembered } from './storage'
 import type {
@@ -263,12 +263,11 @@ export function useConfigSanity(): QueryState<ConfigSanity> {
       queryKey: keys.sanity(deployment.id),
       staleTime: POLL_MS,
       retry: false,
-      refetchInterval: (query) => (query.state.data?.value.status === 'unknown' ? POLL_MS : false),
+      refetchInterval: POLL_MS,
       queryFn: async (): Promise<WithError<ConfigSanity>> => {
         if (!deployment.hub.escrow || !isLive(deployment)) return { value: notLive(), error: null }
         try {
-          const [cw721, bridgeEscrow, wiring] = await Promise.all([hub.escrowCw721(), eth.bridgeEscrow(), eth.bridgeWiring()])
-          return { value: checkConfig(deployment, cw721, bridgeEscrow, wiring), error: null }
+          return { value: await readSendSanity(deployment, hub, eth), error: null }
         } catch (e) {
           const error = toBridgeError(e)
           if (error.code === 'NotLive') return { value: notLive(), error: null }
@@ -363,7 +362,7 @@ function refetchNow(ctx: Ctx, q: UseQueryResult<unknown>, reads: readonly (reado
   void q.refetch()
 }
 
-/** Reads the light client now. Frozen → ClientFrozen, unreadable → Network; either way the health banner refreshes. */
+/** Refreshes the client, wiring and both escrow-admin checks before involving the wallet. */
 async function checkClientFresh(ctx: Ctx): Promise<void> {
   const d = ctx.deployment.id
   let frozen: boolean
@@ -379,6 +378,14 @@ async function checkClientFresh(ctx: Ctx): Promise<void> {
   if (frozen) {
     void ctx.qc.invalidateQueries({ queryKey: keys.health(d) })
     throw new BridgeError('ClientFrozen', "Ethereum's light client of the Hub is frozen, so nothing was sent")
+  }
+  try {
+    const sanity = await readSendSanity(ctx.deployment, ctx.hub, ctx.eth)
+    ctx.qc.setQueryData(keys.sanity(d), { value: sanity, error: null })
+    if (!sanity.ok) throw new BridgeError('Unknown', `${sanity.problems.map((p) => p.message).join(' ')} Nothing was sent.`)
+  } catch (e) {
+    void ctx.qc.invalidateQueries({ queryKey: keys.sanity(d) })
+    throw toBridgeError(e)
   }
 }
 

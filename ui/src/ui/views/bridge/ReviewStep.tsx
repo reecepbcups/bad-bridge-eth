@@ -115,7 +115,7 @@ export function ReviewStep() {
     if (!s.ok) {
       return s.status === 'unknown' || s.problems.length === 0
         ? "Couldn't double-check the bridge contracts, so sending is off for now."
-        : "Sending is switched off: the bridge contracts don't match (see the note up top)."
+        : s.problems[0]?.message ?? 'Sending is switched off: a bridge safety check failed (see the note up top).'
     }
     const h = health.data
     if (!h) return health.error ? "Can't reach Ethereum to check the bridge, so sending is off for now." : 'Checking the bridge…'

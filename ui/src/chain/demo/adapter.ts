@@ -99,6 +99,7 @@ export function createDemoReaders(sim: DemoSim, deployment: Deployment): { hub: 
         requireEscrow()
         return deployment.hub.cw721
       }),
+    escrowAdmin: () => read(() => { requireEscrow(); return null }),
     contractInfo: (address) =>
       read((): ContractInfo => {
         if (address === deployment.hub.cw721) return { codeId: 434, admin: DEMO_COLLECTION_ADMIN }
@@ -112,6 +113,7 @@ export function createDemoReaders(sim: DemoSim, deployment: Deployment): { hub: 
   }
 
   const eth: EthReader = {
+    clientSafety: () => read(() => { requireBridge(); return { frozen: sim.client().frozen, expired: false, retired: false } }),
     client: () =>
       read(() => {
         requireBridge()

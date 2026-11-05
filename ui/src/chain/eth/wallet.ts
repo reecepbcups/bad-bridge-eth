@@ -67,7 +67,7 @@ export function useEthWallet(deployment: Deployment): WalletState<EthAddress> {
         setPending(false)
       }
     },
-    [config, target],
+    [config],
   )
 
   const disconnectAll = useCallback(async () => {

@@ -4,6 +4,8 @@ import { fromBase64, fromBech32, fromUtf8, toBase64, toHex, toUtf8 } from '@cosm
 import {
   QueryContractInfoRequest,
   QueryContractInfoResponse,
+  QueryRawContractStateRequest,
+  QueryRawContractStateResponse,
   QuerySmartContractStateRequest,
   QuerySmartContractStateResponse,
 } from 'cosmjs-types/cosmwasm/wasm/v1/query'
@@ -79,7 +81,8 @@ export async function abciQuery(http: Http, base: string, path: string, dataHex:
   if (!response) throw new EndpointError(`${base} abci_query: no response`)
   const code = typeof response.code === 'number' ? response.code : 0
   if (code !== 0) throw new ChainError(typeof response.log === 'string' ? response.log : `abci code ${code}`, code)
-  return typeof response.value === 'string' ? fromBase64(response.value) : new Uint8Array()
+  if (typeof response.value !== 'string') throw new EndpointError(`${base} abci_query: missing response value`)
+  return fromBase64(response.value)
 }
 
 /** Every tx matching `query`, all pages from one endpoint (so pages can't mix two nodes' views). */
@@ -222,7 +225,7 @@ export function createHubReader(deployment: Deployment, options: TransportOption
     } catch (e) {
       if (!(e instanceof BridgeError && e.code === 'Network')) throw e
     }
-    let rpc: SendInfo[] | null = null
+    let rpc: SendInfo[]
     try {
       rpc = sendsIn(await t.run('tx search', { rpc: call.rpc }))
     } catch (e) {
@@ -331,6 +334,31 @@ export function createHubReader(deployment: Deployment, options: TransportOption
       guard(async () => {
         checkAddress(address, 'contract')
         return t.run('contract info', contractInfoCall(address))
+      }),
+
+    escrowAdmin: () =>
+      guard(async () => {
+        const address = escrow()
+        const key = toUtf8('admin')
+        const bytes = await t.run('escrow emergency admin', {
+          async rest(base, http) {
+            const body = await http.get(`${base}/cosmwasm/wasm/v1/contract/${address}/raw/${base64Url(key)}`)
+            if (!isRecord(body) || !('data' in body) || (body.data !== null && typeof body.data !== 'string')) {
+              throw new EndpointError('escrow admin: invalid raw response')
+            }
+            return body.data === null ? new Uint8Array() : fromBase64(body.data)
+          },
+          async rpc(base, http) {
+            const data = toHex(QueryRawContractStateRequest.encode({ address, queryData: key }).finish())
+            return QueryRawContractStateResponse.decode(await abciQuery(http, base, '/cosmwasm.wasm.v1.Query/RawContractState', data)).data
+          },
+        })
+        if (bytes.length === 0) return null
+        const admin: unknown = JSON.parse(fromUtf8(bytes))
+        if (typeof admin !== 'string' || !isHubAddress(admin, hub.bech32Prefix)) {
+          throw new BridgeError('Unknown', 'escrow emergency admin is not a valid address')
+        }
+        return admin
       }),
   }
 }

@@ -1,6 +1,6 @@
 import { decodeBech32 } from '../chain/bech32'
 import { bytesToHex, type Hex } from 'viem'
-import type { BridgeWiring, HubAddress } from '../chain/types'
+import type { BridgeWiring, EthReader, HubAddress, HubReader } from '../chain/types'
 import { isLive, type Deployment } from '../config/deployments'
 import type { ConfigProblem, ConfigSanity, WiringMismatch } from './types'
 
@@ -24,6 +24,22 @@ export function escrowBytes32(escrow: HubAddress): Hex | null {
 /** The not-live result: the deployment has no escrow or bridge yet. */
 export function notLive(): ConfigSanity {
   return { ok: false, status: 'not-live', problems: [withMessage({ code: 'NotLive' })] }
+}
+
+/** Fresh checks for every send, also used for the review screen's disabled state. */
+export async function readSendSanity(deployment: Deployment, hub: HubReader, eth: EthReader): Promise<ConfigSanity> {
+  if (!deployment.hub.escrow || !isLive(deployment)) return notLive()
+  const [cw721, escrow, wiring, safety, info, admin] = await Promise.all([
+    hub.escrowCw721(), eth.bridgeEscrow(), eth.bridgeWiring(), eth.clientSafety(),
+    hub.contractInfo(deployment.hub.escrow), hub.escrowAdmin(),
+  ])
+  const problems = [...checkConfig(deployment, cw721, escrow, wiring).problems]
+  for (const reason of ['frozen', 'expired', 'retired'] as const) {
+    if (safety[reason]) problems.push(withMessage({ code: 'ClientUnavailable', reason }))
+  }
+  if (info.admin) problems.push(withMessage({ code: 'EscrowAdmin', power: 'upgrade', admin: info.admin }))
+  if (admin) problems.push(withMessage({ code: 'EscrowAdmin', power: 'emergency unlock', admin }))
+  return { ok: problems.length === 0, status: problems.length ? 'mismatch' : 'ok', problems }
 }
 
 /**
@@ -77,6 +93,10 @@ function describeMismatch(m: WiringMismatch): string {
 /** Plain-English copy for one problem. The UI may reword it; this is the fallback and the log line. */
 export function describeConfigProblem(problem: ConfigProblem): string {
   switch (problem.code) {
+    case 'ClientUnavailable':
+      return `The bridge's pinned light client is ${problem.reason}. Sending is disabled because new deposits could be stranded.`
+    case 'EscrowAdmin':
+      return `The escrow still has an ${problem.power} admin (${problem.admin}). Sending is disabled until that authority is removed.`
     case 'NotLive':
       return "This collection's bridge isn't live yet: the Hub escrow or the Ethereum bridge hasn't been deployed."
     case 'EscrowCollection':

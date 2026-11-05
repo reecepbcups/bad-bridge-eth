@@ -49,6 +49,9 @@ export class FakeChain {
   code = new Map<string, Hex>()
   latestHeight = 33_100_000n
   frozen = false
+  currentClient: Address = LIGHT_CLIENT
+  consensusHash: Hex = `0x${'11'.repeat(32)}`
+  timestamp = BigInt(Math.floor(Date.now() / 1000))
   /** clientState().chainId */
   clientChainId = 'cosmoshub-4'
   /** bridge.clientId() */
@@ -97,6 +100,8 @@ export class FakeChain {
         return Promise.resolve(numberToHex(1))
       case 'eth_blockNumber':
         return Promise.resolve(numberToHex(1))
+      case 'eth_getBlockByNumber':
+        return Promise.resolve({ number: '0x1', timestamp: numberToHex(this.timestamp), transactions: [] })
       case 'eth_call': {
         const out = this.execute(first as Call)
         return out.ok ? Promise.resolve(out.data) : Promise.reject(rpcError(3, 'execution reverted', out.data))
@@ -170,6 +175,9 @@ export class FakeChain {
     if (to === MULTICALL3) return this.aggregate3(call.data, commit)
     if (to === BRIDGE) return this.bridge(call.data, commit)
     if (to === LIGHT_CLIENT) {
+      if (decodeFunctionData({ abi: lightClientAbi, data: call.data }).functionName === 'getConsensusStateHash') {
+        return { ok: true, data: encodeFunctionResult({ abi: lightClientAbi, functionName: 'getConsensusStateHash', result: this.consensusHash }) }
+      }
       return {
         ok: true,
         data: encodeFunctionResult({
@@ -180,6 +188,9 @@ export class FakeChain {
       }
     }
     if (to === this.router) {
+      if (decodeFunctionData({ abi: routerAbi, data: call.data }).functionName === 'getClient') {
+        return { ok: true, data: encodeFunctionResult({ abi: routerAbi, functionName: 'getClient', result: this.currentClient }) }
+      }
       return {
         ok: true,
         data: encodeFunctionResult({

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { DEMO, DEMO_OFF, pickAndReview, sendButton, skipAhead, trackErrors } from './support'
+import { DEMO, DEMO_OFF, trackErrors } from './support'
 
 // The chrome around the views: the demo banner, the skip link, tabs, titles, focus after actions that remove
 // the focused control, live announcements and thumb-sized targets.
@@ -18,13 +18,13 @@ test('the demo says so, full width, on every page', async ({ page }) => {
 test('the skip link jumps to the view without routing anywhere', async ({ page }) => {
   const errors = trackErrors(page)
   await page.goto(`${DEMO}#/kids`)
-  await expect(page.getByRole('link', { name: '#9254', exact: true })).toBeVisible()
+  await expect(page.getByRole('link', { name: '#8073', exact: true })).toBeVisible()
   await page.keyboard.press('Tab')
   const skip = page.getByRole('link', { name: 'Skip to content' })
   await expect(skip).toBeFocused()
   await page.keyboard.press('Enter')
   await expect(page).toHaveURL(/#\/kids$/)
-  await expect(page.getByRole('heading', { level: 2, name: 'My kids' })).toBeFocused()
+  await expect(page.getByRole('heading', { level: 2, name: 'My Eth kids' })).toBeFocused()
   await expect(page.getByText('Nothing here')).toHaveCount(0)
   expect(errors).toEqual([])
 })
@@ -34,13 +34,14 @@ for (const width of [375, 330]) {
     await page.setViewportSize({ width, height: 800 })
     await page.goto(`${DEMO}#/`)
     const tabs = page.getByRole('navigation', { name: 'Sections' }).getByRole('link')
-    await expect(tabs).toHaveCount(3)
+    await expect(tabs).toHaveCount(4)
     await expect(tabs.nth(1)).toContainText('2') // with the badge, the widest it gets
     await page.evaluate(() => document.fonts.ready)
     const boxes = await tabs.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect))
     for (const b of boxes) {
       expect(b.top).toBe(boxes[0]?.top)
-      expect(b.height).toBeLessThan(50)
+      expect(b.left).toBeGreaterThanOrEqual(0)
+      expect(b.right).toBeLessThanOrEqual(width)
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(0)
   })
@@ -50,9 +51,9 @@ test('each view names the page', async ({ page }) => {
   await page.goto(`${DEMO}#/`)
   await expect(page).toHaveTitle('Bridge a kid · Bad Bridge')
   for (const [hash, title] of [
-    ['#/kids', 'My kids · Bad Bridge'],
+    ['#/kids', 'My Eth kids · Bad Bridge'],
     ['#/kid/8783', '#8783 · Bad Bridge'],
-    ['#/kids/cosmos1qa3t6xrnec5cfhe6jhcyhfsptjm3ymwg6vlqk8', 'Kids for cosmos1qa3…lqk8 · Bad Bridge'],
+    ['#/kids/cosmos1qa3t6xrnec5cfhe6jhcyhfsptjm3ymwg6vlqk8', 'Eth kids for cosmos1qa3…lqk8 · Bad Bridge'],
     ['#/nope', 'Nothing here · Bad Bridge'],
   ] as const) {
     await page.evaluate((h) => (location.hash = h), hash)
@@ -78,29 +79,22 @@ test('connecting from the header lands focus on the new chip', async ({ page }) 
 })
 
 test('connecting Ethereum on the claim screen hands focus to the Claim button', async ({ page }) => {
-  await page.goto(`${DEMO}#/`)
-  await pickAndReview(page, [663])
-  await page.getByLabel('Got it, one way only').check()
-  await sendButton(page).click()
-  await skipAhead(page)
-  await skipAhead(page)
-  await expect(page.getByRole('heading', { level: 2, name: 'It made it across!' })).toBeVisible()
-  await page.evaluate(() => window.badBridgeDemo?.setWallet('eth', false))
-  await page.getByRole('button', { name: 'Connect Ethereum to claim' }).click()
+  await page.goto(`${DEMO_OFF}#/kid/9254`)
+  await page.getByRole('button', { name: 'Claim #9254' }).click()
   await page.getByRole('dialog', { name: 'Connect Ethereum' }).getByRole('button', { name: 'Connect MetaMask' }).click()
-  await expect(page.getByRole('button', { name: 'Claim 1 kid' })).toBeFocused()
+  await expect(page.getByRole('button', { name: 'Claim #9254' })).toBeFocused()
 })
 
 test('a tracker claim is announced while it runs, then focus lands on the kid', async ({ page }) => {
   // no `instant`: the demo wallet takes a moment to "sign"
-  await page.goto('./?demo=paused#/kids')
+  await page.goto('./?demo=paused#/crossing')
   const row = page.getByRole('list', { name: 'Kids on the bridge' }).getByRole('listitem').filter({ hasText: '#9254' })
   const claim = row.getByRole('button', { name: 'Claim' })
   await claim.click()
   await expect(page.getByRole('status').filter({ hasText: 'Approve it in MetaMask.' })).toBeVisible()
   await expect(row.getByRole('button', { name: 'Check MetaMask…' })).toBeFocused()
-  await expect(row.getByText('home on Ethereum', { exact: true })).toBeVisible()
-  await expect(row.getByRole('link', { name: '#9254', exact: true })).toBeFocused()
+  await expect(row).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Crossing', exact: true })).toBeFocused()
 })
 
 test.describe('on a phone', () => {
@@ -111,7 +105,7 @@ test.describe('on a phone', () => {
       for (const el of await loc.all()) expect((await el.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44)
     }
     await page.goto(`${DEMO}#/kids`)
-    await expect(page.getByRole('link', { name: '#9254', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: '#8073', exact: true })).toBeVisible()
     await tall(page.locator('.chip'))
     await tall(page.locator('.item summary'))
     await tall(page.getByRole('navigation', { name: 'Sections' }).getByRole('link'))

@@ -35,6 +35,7 @@ export function AboutView() {
   const facts = trust.data
   const collectionAdmin = facts?.collection?.admin ?? null
   const escrowAdmin = facts?.escrow?.admin ?? null
+  const emergencyAdmin = facts?.emergencyAdmin
   const cost = claimCost.data
   return (
     <Card>
@@ -105,8 +106,9 @@ export function AboutView() {
           <details>
             <summary>What happens to the kid on the Hub?</summary>
             <p>
-              It stays locked in the escrow, which has no way to hand it back. That's what makes the Ethereum kid the real
-              one.
+              It stays locked in the escrow. Permanent locking requires both the escrow's upgrade admin and its separate
+              emergency-unlock admin to be removed; the send screen checks both.
+              {emergencyAdmin ? ' This escrow still has an emergency-unlock admin who can return deposited kids.' : ''}
               {collectionAdmin
                 ? ` One catch: the ${deployment.collectionName} contract has an admin who could upgrade it and move kids out of the escrow (see above).${
                     escrowAdmin ? ' The escrow itself also has an admin who could upgrade it.' : ''
@@ -248,7 +250,7 @@ function TrustList({ facts, failed }: { facts: TrustFacts | undefined; failed: b
     <>
       <ul className="trust">
         <Fact>
-          <b>Nobody can mint a fake kid.</b> Every kid on Ethereum is backed by a proof of the Hub's real state, checked
+          <b>Minting requires a proof.</b> Every kid on Ethereum is backed by a proof of the Hub's state, checked
           against the light client that IBC Eureka already runs on Ethereum.
         </Fact>
         {hub.escrow &&
@@ -262,25 +264,35 @@ function TrustList({ facts, failed }: { facts: TrustFacts | undefined; failed: b
             </Fact>
           ) : (
             <Fact>
-              <b>The escrow has no admin.</b> Nobody can upgrade it or pull kids out.
+              <b>The escrow has no upgrade admin.</b> Nobody can migrate its code.
               {/* COPY: trust, no escrow admin */}
             </Fact>
           ))}
+        {hub.escrow && (facts?.emergencyAdmin === undefined ? (
+          <Fact tone="unknown">{unknown("the escrow's emergency unlock authority")}</Fact>
+        ) : facts.emergencyAdmin ? (
+          <Fact tone="caveat"><b>The escrow has an emergency-unlock admin.</b> <Admin address={facts.emergencyAdmin} /> can
+            return deposited kids, including kids already proven on Ethereum. Sending is disabled until this power is renounced.</Fact>
+        ) : (
+          <Fact><b>Emergency unlock is renounced.</b> The escrow's internal admin can no longer release deposited kids.</Fact>
+        ))}
         {eth.bridge && (
           <>
             <Fact>
-              <b>BadBridge has no owner.</b> Nobody can upgrade the Ethereum contract or mint a kid without a proof.
+              <b>The Ethereum bridge cannot be upgraded.</b> Its owner can change royalty settings and contract metadata,
+              but cannot mint a kid without a proof or change the pinned light client.
               {/* COPY: trust, BadBridge */}
             </Fact>
             <Fact tone="caveat">
               <b>It leans on IBC Eureka.</b> BadBridge checks proofs against Eureka's light client of the Hub, and Eureka's
-              governance can freeze or replace that client
+              governance can freeze that client or replace the router's entry
               {facts?.routerUpgradeable === true
                 ? ' (the Eureka router that points to it can be upgraded)'
                 : facts && facts.routerUpgradeable === undefined
                   ? " (we couldn't confirm whether the Eureka router can be upgraded)"
                   : ''}
-              . If it's frozen, new kids can't cross until it's fixed; kids that already made it across can still be claimed.
+              . BadBridge keeps its original client even after a router replacement. If that pinned client expires,
+              is retired, or stays frozen, unproven kids may be stranded. Already-proven kids can still be claimed.
               {/* COPY: trust, Eureka dependency */}
             </Fact>
           </>

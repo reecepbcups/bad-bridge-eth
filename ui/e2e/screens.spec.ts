@@ -83,7 +83,7 @@ const BRIDGE_WALK: Stop[] = [
     'crossing',
     async (page) => {
       await sendButton(page).click()
-      await expect(page.getByRole('heading', { level: 2, name: 'Crossing the bridge…' })).toBeVisible()
+      await expect(page.getByRole('heading', { level: 2, name: 'Crossing', exact: true })).toBeVisible()
       await dismissToasts(page)
     },
   ],
@@ -100,14 +100,16 @@ const BRIDGE_WALK: Stop[] = [
     'claim',
     async (page) => {
       await skipAhead(page)
-      await expect(page.getByRole('heading', { level: 2, name: 'They made it across!' })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'Claim all 3' })).toBeVisible()
     },
   ],
   [
     'done',
     async (page) => {
-      await page.getByRole('button', { name: 'Claim 2 kids' }).click()
-      await expect(page.getByRole('heading', { level: 2, name: /Welcome to Ethereum/ })).toBeVisible()
+      await page.getByRole('button', { name: 'Claim all 3' }).click()
+      await expect(page.getByRole('link', { name: '#9176', exact: true })).toHaveCount(0)
+      await page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'My Eth kids' }).click()
+      await expect(page.getByRole('listitem').filter({ hasText: '#9176' }).getByText('home on Ethereum', { exact: true })).toBeVisible()
       await dismissToasts(page)
     },
   ],
@@ -117,9 +119,9 @@ const OTHER_STOPS: Stop[] = [
   [
     'tracker',
     async (page) => {
-      await page.goto(`${DEMO}#/kids`)
+      await page.goto(`${DEMO}#/crossing`)
       await expect(page.getByRole('link', { name: '#9254', exact: true })).toBeVisible()
-      await page.getByText("What's happening?").first().click()
+      await expect(page.getByRole('img', { name: /now being proven/ })).toBeVisible()
     },
   ],
   [
@@ -133,7 +135,7 @@ const OTHER_STOPS: Stop[] = [
     'kid',
     async (page) => {
       await page.goto(`${DEMO}#/kid/8783`)
-      await expect(page.getByText('crossing', { exact: true })).toBeVisible()
+      await expect(page.locator('.kid-head').getByText('crossing', { exact: true })).toBeVisible()
     },
   ],
   [
@@ -150,7 +152,8 @@ const OTHER_STOPS: Stop[] = [
       await demoReady(page)
       await page.evaluate(() => window.badBridgeDemo?.setFrozen(true))
       await pickAndReview(page, [663])
-      await expect(page.getByText('The bridge is stuck for now, so sending is off.')).toBeVisible()
+      await expect(sendButton(page)).toBeDisabled()
+      await expect(page.getByRole('status').filter({ hasText: 'The bridge is stuck for now' })).toBeVisible()
     },
   ],
   [
@@ -170,7 +173,7 @@ const OTHER_STOPS: Stop[] = [
   [
     'wrong-chain',
     async (page) => {
-      await page.goto('./?demo=paused,instant,wrongchain#/kids')
+      await page.goto('./?demo=paused,instant,wrongchain#/crossing')
       await expect(page.getByRole('button', { name: 'Switch to Ethereum' })).toBeVisible()
     },
   ],

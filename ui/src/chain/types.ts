@@ -7,7 +7,7 @@ import type { Address, Hex } from 'viem'
 export type KidId = number
 /**
  * Most kids one Hub send may carry. Each send_nft costs ~312k gas with headroom and the Hub's block gas limit is
- * 75M, so 100 leaves plenty of room. The Hub writer refuses more with TooManyKids.
+ * 75M; the UI and writer conservatively cap each send at 50 kids.
  */
 export const MAX_KIDS_PER_SEND = 50
 /** 0x Ethereum address. Adapters return it checksummed. */
@@ -47,12 +47,19 @@ export interface HubBlock {
   time: Date
 }
 
-/** Ethereum's light client of the Hub, as BadBridge resolves it through the router. */
+/** Ethereum's light client of the Hub, permanently pinned by BadBridge at deployment. */
 export interface ClientStatus {
   /** Latest Hub height Ethereum has seen (latestHeight.revisionHeight). */
   latestHeight: number
   /** A frozen client verifies nothing: new kids can't be proven. Already-proven kids can still be claimed. */
   frozen: boolean
+}
+
+/** Whether the pinned client can still accept new Hub updates. Checked again before every send. */
+export interface ClientSafety {
+  frozen: boolean
+  expired: boolean
+  retired: boolean
 }
 
 /** One kid's state on Ethereum. */
@@ -77,7 +84,7 @@ export interface BridgeWiring {
   router: EthAddress
   /** bridge.clientId(): the Eureka client id it asks the router for. */
   clientId: string
-  /** bridge.lightClient(): what the router hands back for that id today. */
+  /** bridge.lightClient(): the immutable client selected at bridge deployment. */
   lightClient: EthAddress
   /** clientState().chainId of that light client: the chain it follows. */
   chainId: string
@@ -141,12 +148,16 @@ export interface HubReader {
   escrowCw721(): Promise<HubAddress>
   /** A contract's code id and admin, for the trust facts on About. */
   contractInfo(address: HubAddress): Promise<ContractInfo>
+  /** Internal emergency-unlock authority, separate from the CosmWasm migration admin. */
+  escrowAdmin(): Promise<HubAddress | null>
 }
 
 /** Read-only Ethereum queries (viem, batched through Multicall3 in the real adapter). */
 export interface EthReader {
   /** The Hub light client's height and frozen flag, via bridge.lightClient(). */
   client(): Promise<ClientStatus>
+  /** Anchors the latest Hub timestamp to Ethereum and checks expiry and the router's current client. */
+  clientSafety(): Promise<ClientSafety>
   /** proven(id) and ownerOf(id) for every id, batched. Every requested id is a key in the map. */
   kidStatus(ids: readonly KidId[]): Promise<Map<KidId, KidEthStatus>>
   /** True if `address` has code, so the UI can warn before minting to a contract. */

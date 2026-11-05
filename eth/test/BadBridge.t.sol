@@ -130,6 +130,29 @@ contract BadBridgeTest is BadBridgeBase {
         bridge.submitBatch(HEIGHT, cs, proofFor(kv(key(ESCROW, "b", 1), abi.encodePacked(address(1)))));
     }
 
+    function test_verifierReceivesExactProof() public {
+        BadBridge.SP1Proof memory p = proofFor(kv(key(ESCROW, "b", 1), abi.encodePacked(address(1))));
+        p.proof = hex"12345678";
+        vm.expectCall(VERIFIER, abi.encodeCall(ISP1Verifier.verifyProof, (p.vKey, p.publicValues, p.proof)), 1);
+        bridge.submitBatch(HEIGHT, cs, p);
+        assertEq(bridge.proven(1), address(1));
+    }
+
+    function test_verifierRejectionCannotRecordOrMint() public {
+        BadBridge.SP1Proof memory p = proofFor(kv(key(ESCROW, "b", 1), abi.encodePacked(address(1))));
+        p.proof = hex"deadbeef";
+        bytes memory callData = abi.encodeCall(ISP1Verifier.verifyProof, (p.vKey, p.publicValues, p.proof));
+        bytes memory rejection = abi.encodeWithSignature("InvalidProof()");
+        vm.mockCallRevert(VERIFIER, callData, rejection);
+        vm.expectCall(VERIFIER, callData, 1);
+        vm.expectRevert(rejection);
+        bridge.submitBatch(HEIGHT, cs, p);
+        assertEq(bridge.proven(1), address(0));
+        assertEq(bridge.totalSupply(), 0);
+        vm.expectRevert(abi.encodeWithSelector(BadBridge.NotProven.selector, 1));
+        bridge.claim(1);
+    }
+
     function testFuzz_parseOnlyAcceptsExactLayout(bytes calldata k, uint32 tokenId, address to) public view {
         BadBridge.KVPair memory p = kv(k, abi.encodePacked(to));
         try bridge.parse(p, 0) returns (uint32 id, address recipient) {

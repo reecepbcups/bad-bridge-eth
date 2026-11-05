@@ -15,6 +15,7 @@ import { bridgeAbi, lightClientAbi, routerAbi } from './abi'
 import { createEthPublicClient } from './client'
 import { typicalClaimGas } from './gas'
 import { findRevert, toEthError } from './errors'
+import { readClientSafety } from './safety'
 
 /** Kids per multicall. Two calls each: 500 calls, ~110 KB of calldata and ~2M gas, well inside public RPC limits. */
 export const KID_STATUS_CHUNK = 250
@@ -119,6 +120,7 @@ export function createEthReader(deployment: Deployment, options: EthReaderOption
   }
 
   return {
+    clientSafety: () => guard(() => readClientSafety(deployment, client)),
     client: () =>
       guard(async (): Promise<ClientStatus> => {
         const bridge = requireBridge(deployment)

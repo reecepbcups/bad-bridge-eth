@@ -20,7 +20,7 @@ Metadata doesn't move. `tokenURI` is `baseURI + id`, same IPFS folder as the Hub
 |-|-|
 |escrow (CosmWasm)|`escrow/`|
 |bridge (`BadBridge.sol`)|`eth/`|
-|batcher (Rust)|`batcher/service/`|
+|batcher (Rust)|[`batcher/service/`](batcher/service/README.md) — running it, persistent proof state, and recovery|
 
 ## Checking it
 
@@ -30,6 +30,17 @@ Unit + fuzz tests:
 cd escrow && cargo test        # tests/fuzz.rs runs random callers against a reference model
 cd eth && forge test           # test/Access.t.sol is the who-can-call-what part, invariants are slow (~10 min)
 ```
+
+The Ethereum build uses Solar through Foundry 1.9.0 or newer. Initialize the pinned libraries with `git submodule update --init --recursive`. The normal suite checks the exact verifier call and that a verifier rejection cannot record or mint a token. To exercise the checked-in genuine proof and reject modified proofs against the real Ethereum contracts:
+
+```bash
+cd eth
+ETH_FORK_RPC=https://ethereum-rpc.publicnode.com forge test --match-contract RealProofForkTest
+```
+
+This uses a local fork of current Ethereum state with public reads and never broadcasts. The light client retains the historical Hub root used by the fixture. These three tests explicitly skip when `ETH_FORK_RPC` is unset; a future upstream migration can require updating the integration fixture.
+
+Before uploading escrow code, run `scripts/build-escrow.sh` from the repository root. It builds the current Rust source and updates `escrow/artifacts/checksums.txt`; see `escrow/BUILD.md` for the pinned compiler and compatibility checks. The deployment script requires explicit `CW721`, `ADMIN`, and `FROM_KEY` values. Its argument handling can be checked without a node or wallet with `python3 scripts/test-instantiate-escrow.py`.
 
 Quint specs live in `spec/`. Each one has a prod module that should hold, plus a broken variant that should fail, so you know the invariants actually bite.
 
@@ -79,6 +90,9 @@ Eureka light client: `0x4bB8A05D5b40dF7a3B97770E1943461B681B62E9`
 
 - Confirm `cw721-migration` (`cosmos12gsv9tmjhhg86wg9fnd9cnju28jx3fxva9cn8dh9meketkfxxajqmg3exz`) calls the receiver hook on `send_nft`
 - Escrow with `--no-admin`
+- Renounce the escrow's separate internal EmergencyUnlock admin before enabling public deposits; `--no-admin` alone does not remove it
 - Audit `parse()` and the escrow receive path, fuzz more
 - Rotate the prover key, it leaked into a chat log
 - Set up Vercel with the artifact proxy, or "Prove it yourself" won't work. See `ui/README.md` Hosting
+
+Final addresses, Safe creation, key rotation, source-collection migration authority, and on-chain deployment remain operator launch steps in `mainnet.md`. Local checks do not constitute an independent audit of SP1's circuits or the upstream consensus systems.

@@ -111,6 +111,16 @@ describe('remembered trips', () => {
     expect(rememberedTrips('demo')).toEqual([])
     expect(() => rememberTrips('demo', [4])).not.toThrow()
     expect(rememberedTrips('demo')).toEqual([4])
+    rememberTrips('demo', [5])
+    expect(rememberedTrips('demo')).toEqual([4, 5])
+  })
+
+  it('merges unsaved trips when reads work but writes fail', () => {
+    localStorage.setItem('bad-bridge:trips:demo', JSON.stringify([1]))
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new DOMException('full', 'QuotaExceededError') })
+    rememberTrips('demo', [2])
+    rememberTrips('demo', [3])
+    expect(rememberedTrips('demo')).toEqual([1, 2, 3])
   })
 
   it('works for this tab when window.localStorage itself throws', () => {

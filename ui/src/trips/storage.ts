@@ -134,7 +134,10 @@ export function rememberTrips(deployment: DeploymentId, add: readonly (KidId | R
   // the in-memory cache only learns about other tabs' writes via the 'storage' listener, which is only attached
   // while a subscriber is mounted: re-read localStorage fresh so a write here never clobbers a concurrent write
   // from another tab that this tab missed.
-  const details = [...loadRemembered(deployment).details]
+  // Merge the tab's unsaved entries too: getItem may work even when setItem fails (quota/full storage).
+  const byId = new Map(current(deployment).details.map((entry) => [entry.id, entry]))
+  for (const entry of loadRemembered(deployment).details) byId.set(entry.id, { ...byId.get(entry.id), ...entry })
+  const details = [...byId.values()]
   let changed = false
   for (const item of add) {
     const entry = parseEntry(item)

@@ -1,6 +1,6 @@
 // Claims against a local Anvil fork of mainnet, through the real writer core (no wagmi).
-// Seeds proofs with anvil_setStorageAt on the reece-test BadBridge, then claims one kid directly and two through
-// Multicall3. Needs `anvil` on PATH and network for the fork's upstream RPC; skips without anvil.
+// Seeds proofs on the configured RBT2 bridge, then calls claim and claimMany.
+// Needs `anvil` on PATH and network for the fork's upstream RPC; skips without anvil.
 
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process'
 import { createServer } from 'node:net'
@@ -10,7 +10,6 @@ import {
   createWalletClient,
   decodeFunctionData,
   encodeAbiParameters,
-  getAddress,
   http,
   keccak256,
   pad,
@@ -22,7 +21,7 @@ import {
 import { privateKeyToAccount } from 'viem/accounts'
 import { mainnet } from 'viem/chains'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { bridgeAbi, multicall3WriteAbi } from '../../src/chain/eth/abi'
+import { bridgeAbi } from '../../src/chain/eth/abi'
 import { createEthReader } from '../../src/chain/eth/reader'
 import { createEthWriter } from '../../src/chain/eth/writer'
 import { BridgeError, type EthReader, type KidEthStatus, type KidId } from '../../src/chain/types'
@@ -30,19 +29,16 @@ import { DEPLOYMENTS } from '../../src/config/deployments'
 
 const FORK_URL = 'https://ethereum-rpc.publicnode.com'
 const deployment = DEPLOYMENTS['reece-test']
-const BRIDGE = '0xDe185D7902340086cc4C37322584e246DC5eE198' as const
-const MULTICALL3 = '0xcA11bde05977b3631167028862bE2a173976CA11' as const
+const BRIDGE = deployment.eth.bridge!
 
-// `forge inspect BadBridge storage-layout` (eth/, OZ c64a1edb): _name 0, _symbol 1, _owners 2, _balances 3,
-// _tokenApprovals 4, _operatorApprovals 5, clientId 6, baseURI 7, proven 8. ROUTER and ESCROW are immutables.
-const PROVEN_SLOT = 8n
+// `forge inspect BadBridge storage-layout` (OZ c64a1edb): clientId 16, baseURI 17,
+// _contractURI 18, proven 19. Use unused ids outside the live test collection to avoid existing mints.
+const PROVEN_SLOT = 19n
 
 // anvil's well-known dev accounts (mnemonic "test test … junk"). #0 claims, #1 is the proven recipient,
 // so the test also shows claim() mints to the proven address whoever sends it.
 const CLAIMER_KEY: Hex = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
 const RECIPIENT: Address = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8'
-// holds reece-test #2 and #3 on mainnet (EIP-55: 0xD2C392084761cb6E44c544B6f39dcc001fDe9775)
-const REECE: Address = getAddress('0xd2c392084761cb6e44c544b6f39dcc001fde9775')
 
 const hasAnvil = spawnSync('anvil', ['--version']).status === 0
 
@@ -101,7 +97,7 @@ describe.skipIf(!hasAnvil)('claim on an anvil mainnet fork', () => {
 
     const test = createTestClient({ mode: 'anvil', chain: mainnet, transport: http(url) })
     await test.setBalance({ address: account.address, value: parseEther('10') })
-    for (const id of [1, 7, 8, 10, 11, 12]) {
+    for (const id of [10001, 10007, 10008, 10010, 10011, 10012]) {
       await test.setStorageAt({ address: BRIDGE, index: provenSlot(id), value: pad(RECIPIENT) })
     }
     reader = createEthReader(deployment, { client: publicClient })
@@ -112,11 +108,10 @@ describe.skipIf(!hasAnvil)('claim on an anvil mainnet fork', () => {
   })
 
   it('reads the seeded proofs and mainnet state', async () => {
-    const status = await reader.kidStatus([1, 2, 3, 7, 8, 9])
-    expect([...status.keys()].sort((a, b) => a - b)).toEqual([1, 2, 3, 7, 8, 9])
-    for (const id of [1, 7, 8]) expect(status.get(id)).toEqual({ proven: RECIPIENT, owner: null })
-    expect(status.get(2)).toEqual({ proven: REECE, owner: REECE })
-    expect(status.get(9)).toEqual({ proven: null, owner: null })
+    const status = await reader.kidStatus([10001, 10007, 10008, 10009])
+    expect([...status.keys()].sort((a, b) => a - b)).toEqual([10001, 10007, 10008, 10009])
+    for (const id of [10001, 10007, 10008]) expect(status.get(id)).toEqual({ proven: RECIPIENT, owner: null })
+    expect(status.get(10009)).toEqual({ proven: null, owner: null })
 
     const client = await reader.client()
     expect(client.latestHeight).toBeGreaterThan(33_092_463)
@@ -127,62 +122,62 @@ describe.skipIf(!hasAnvil)('claim on an anvil mainnet fork', () => {
   })
 
   it('estimateClaim simulates proven kids and falls back for the rest', async () => {
-    const one = await reader.estimateClaim([1])
+    const one = await reader.estimateClaim([10001])
     expect(one.simulated).toBe(true)
-    // ~79k measured for claim(id); the node's estimate has a little headroom
+    // Current RBT2 includes automatic voting checkpoints, unlike the original bridge.
     expect(one.gas).toBeGreaterThan(60_000)
-    expect(one.gas).toBeLessThan(120_000)
+    expect(one.gas).toBeLessThan(300_000)
     expect(BigInt(one.fee)).toBe(BigInt(one.gas) * BigInt(one.gasPrice))
-    const two = await reader.estimateClaim([7, 8])
+    const two = await reader.estimateClaim([10007, 10008])
     expect(two.simulated).toBe(true)
     expect(two.gas).toBeGreaterThan(one.gas)
-    // #9 isn't proven, so the strict batch reverts and typical gas stands in
-    expect(await reader.estimateClaim([7, 9])).toMatchObject({ gas: 109_000, simulated: false })
+    // The unproven id makes simulation fail, so the reader returns its fallback estimate.
+    expect(await reader.estimateClaim([10007, 10009])).toMatchObject({ simulated: false })
   })
 
   it('claims one kid with bridge.claim', async () => {
-    const { txHash } = await writer().claim([1])
+    const { txHash } = await writer().claim([10001])
     const tx = await publicClient.getTransaction({ hash: txHash })
     expect(tx.to?.toLowerCase()).toBe(BRIDGE.toLowerCase())
-    expect(await ownerOf(1)).toBe(RECIPIENT)
+    expect(await ownerOf(10001)).toBe(RECIPIENT)
   })
 
-  it('claims several kids in one Multicall3 transaction', async () => {
+  it('claims several kids with bridge.claimMany', async () => {
     const stages: string[] = []
-    const { txHash } = await writer().claim([7, 8], { onStage: (s) => stages.push(s) })
+    const { txHash } = await writer().claim([10007, 10008], { onStage: (s) => stages.push(s) })
     expect(stages).toEqual(['signing', 'confirming'])
     const tx = await publicClient.getTransaction({ hash: txHash })
-    expect(tx.to?.toLowerCase()).toBe(MULTICALL3.toLowerCase())
-    expect(await ownerOf(7)).toBe(RECIPIENT)
-    expect(await ownerOf(8)).toBe(RECIPIENT)
+    expect(tx.to?.toLowerCase()).toBe(BRIDGE.toLowerCase())
+    expect(decodeFunctionData({ abi: bridgeAbi, data: tx.input })).toMatchObject({ functionName: 'claimMany', args: [[10007, 10008]] })
+    expect(await ownerOf(10007)).toBe(RECIPIENT)
+    expect(await ownerOf(10008)).toBe(RECIPIENT)
   })
 
   it('refuses an already-minted kid with NotProven', async () => {
-    // depends on #1 being minted; the earlier "claims one kid" test does that, but running this test alone
-    // (e.g. via `.only`) needs it minted here too, so claim it now and swallow an already-minted outcome
+    // Also arrange the mint when this test is run alone.
     await writer()
-      .claim([1])
+      .claim([10001])
       .catch((e: unknown) => {
         if (!(e instanceof BridgeError) || e.code !== 'NotProven') throw e
       })
 
-    const err = await writer().claim([1]).catch((e: unknown) => e)
+    const err = await writer().claim([10001]).catch((e: unknown) => e)
     expect(err).toBeInstanceOf(BridgeError)
-    expect(err).toMatchObject({ code: 'NotProven', tokenId: 1 })
-    expect((err as BridgeError).detail).toMatch(/already minted: #1/)
+    expect(err).toMatchObject({ code: 'NotProven', tokenId: 10001 })
+    expect((err as BridgeError).detail).toBe('already minted: #10001')
 
-    const mixed = await writer().claim([1, 9]).catch((e: unknown) => e)
+    const mixed = await writer().claim([10001, 10009]).catch((e: unknown) => e)
     expect(mixed).toMatchObject({ code: 'NotProven' })
-    expect((mixed as BridgeError).detail).toBe('already minted: #1; not proven yet: #9')
+    expect((mixed as BridgeError).detail).toBe('already minted: #10001; not proven yet: #10009')
   })
 
-  it('drops a kid someone else claimed between the status read and the send', async () => {
-    // #11 gets minted behind the writer's back; the writer's stale reader still thinks it's claimable
+  it('claimMany skips a kid someone else claimed after the status read', async () => {
+    // #10011 gets minted behind the writer's back; its stale reader still thinks it is claimable.
     await createWalletClient({ account, chain: mainnet, transport: http(url) }).writeContract({
       address: BRIDGE,
       abi: bridgeAbi,
       functionName: 'claim',
-      args: [11],
+      args: [10011],
     })
     const stale: EthReader = {
       ...reader,
@@ -193,23 +188,20 @@ describe.skipIf(!hasAnvil)('claim on an anvil mainnet fork', () => {
       publicClient,
       reader: stale,
       walletClient: createWalletClient({ account, chain: mainnet, transport: http(url) }),
-    }).claim([10, 11, 12])
+    }).claim([10010, 10011, 10012])
     const receipt = await publicClient.getTransactionReceipt({ hash: txHash })
     expect(receipt.status).toBe('success')
-    expect(receipt.to?.toLowerCase()).toBe(MULTICALL3.toLowerCase())
-    // the simulation dropped #11, so the batch that went out claims only #10 and #12
+    expect(receipt.to?.toLowerCase()).toBe(BRIDGE.toLowerCase())
+    // All requested ids reach claimMany; the contract safely skips the already-minted one.
     const tx = await publicClient.getTransaction({ hash: txHash })
-    const { args } = decodeFunctionData({ abi: multicall3WriteAbi, data: tx.input })
-    const claimed = args[0].map((call) => decodeFunctionData({ abi: bridgeAbi, data: call.callData }).args[0])
-    expect(claimed).toEqual([10, 12])
-    expect(await ownerOf(10)).toBe(RECIPIENT)
-    expect(await ownerOf(12)).toBe(RECIPIENT)
+    expect(decodeFunctionData({ abi: bridgeAbi, data: tx.input })).toMatchObject({ functionName: 'claimMany', args: [[10010, 10011, 10012]] })
+    expect(await ownerOf(10010)).toBe(RECIPIENT)
+    expect(await ownerOf(10012)).toBe(RECIPIENT)
   })
 
   it('shows every claim in kidStatus', async () => {
-    const status = await reader.kidStatus([1, 2, 3, 7, 8, 9, 10, 11, 12])
-    for (const id of [1, 7, 8, 10, 11, 12]) expect(status.get(id)).toEqual({ proven: RECIPIENT, owner: RECIPIENT })
-    expect(status.get(3)).toEqual({ proven: REECE, owner: REECE })
-    expect(status.get(9)).toEqual({ proven: null, owner: null })
+    const status = await reader.kidStatus([10001, 10007, 10008, 10009, 10010, 10011, 10012])
+    for (const id of [10001, 10007, 10008, 10010, 10011, 10012]) expect(status.get(id)).toEqual({ proven: RECIPIENT, owner: RECIPIENT })
+    expect(status.get(10009)).toEqual({ proven: null, owner: null })
   })
 })

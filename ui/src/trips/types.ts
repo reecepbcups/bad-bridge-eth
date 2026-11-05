@@ -91,6 +91,8 @@ export interface WiringMismatch {
 export type ConfigProblem = (
   /** the deployment has no escrow or bridge yet */
   | { code: 'NotLive' }
+  | { code: 'ClientUnavailable'; reason: 'frozen' | 'expired' | 'retired' }
+  | { code: 'EscrowAdmin'; power: 'upgrade' | 'emergency unlock'; admin: HubAddress }
   /** the escrow accepts a different cw721 than the deployment's */
   | { code: 'EscrowCollection'; expected: HubAddress; actual: HubAddress }
   /** bridge.ESCROW() isn't the deployment's escrow (or isn't 32 bytes, or the configured escrow isn't) */
