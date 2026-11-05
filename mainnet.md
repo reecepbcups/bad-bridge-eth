@@ -28,11 +28,12 @@ Pinata is the only public gateway that still serves these. ipfs.io, dweb.link an
 |Env|Value|
 |-|-|
 |`ESCROW`|raw 32 bytes of the new escrow, see step 2|
-|`CONTRACT_URI`|below|
-|`NAME` / `SYMBOL` / `BASE_URI`|defaults in `Deploy.s.sol` already match chain, don't set|
+|`NAME` / `SYMBOL` / `BASE_URI` / `CONTRACT_URI`|defaults in `Deploy.s.sol` already match chain, don't set|
 
-```bash
-export CONTRACT_URI='data:application/json;utf8,{"name":"Bad Kids","description":"Bad Kids is a collection of 9,999 bad drawings of bad kids","image":"ipfs://QmSFc8TPuVwLUfxEov7s66rfKoJ75NRcBRC4uQjMRcJoZ9/badkids.jpg","external_link":"https://badkids.co/"}'
+Default `CONTRACT_URI`:
+
+```text
+data:application/json;utf8,{"name":"Bad Kids","description":"Bad Kids is a collection of 9,999 bad drawings of bad kids","image":"ipfs://QmSFc8TPuVwLUfxEov7s66rfKoJ75NRcBRC4uQjMRcJoZ9/badkids.jpg","external_link":"https://badkids.com/"}
 ```
 
 The bridge has no owner, so `contractURI` can't be changed after deploy. Double check it before you broadcast. No royalty either, on purpose.

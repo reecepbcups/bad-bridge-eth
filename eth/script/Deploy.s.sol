@@ -5,14 +5,19 @@ import { Script, console } from "forge-std/Script.sol";
 import { BadBridge, IRouter } from "../src/BadBridge.sol";
 
 /// Production deploy. There's no owner, so CONTRACT_URI is final once this runs.
-/// env: ESCROW (raw 32-byte Hub escrow address), CONTRACT_URI
+/// env: ESCROW (raw 32-byte Hub escrow address)
 contract Deploy is Script {
     IRouter constant ROUTER = IRouter(0x3aF134307D5Ee90faa2ba9Cdba14ba66414CF1A7);
 
     function run() external {
         bytes32 escrow = vm.envBytes32("ESCROW");
         require(escrow != bytes32(0), "ESCROW unset");
-        string memory contractURI = vm.envString("CONTRACT_URI");
+        string memory contractURI = vm.envOr(
+            "CONTRACT_URI",
+            string(
+                'data:application/json;utf8,{"name":"Bad Kids","description":"Bad Kids is a collection of 9,999 bad drawings of bad kids","image":"ipfs://QmSFc8TPuVwLUfxEov7s66rfKoJ75NRcBRC4uQjMRcJoZ9/badkids.jpg","external_link":"https://badkids.com/"}'
+            )
+        );
 
         vm.startBroadcast();
         BadBridge bridge = new BadBridge(
