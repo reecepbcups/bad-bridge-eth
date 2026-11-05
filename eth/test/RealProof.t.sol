@@ -44,6 +44,18 @@ contract RealProofForkTest is Test {
         assertEq(bridge.totalSupply(), 1);
     }
 
+    function test_realProofThirdPartyClaimMintsToRecipient() public {
+        address attacker = makeAddr("attacker");
+        vm.prank(attacker);
+        bridge.submitBatch(HEIGHT, cs, proof);
+        assertEq(bridge.proven(1), RECIPIENT);
+
+        vm.prank(attacker);
+        bridge.claim(1);
+        assertEq(bridge.ownerOf(1), RECIPIENT);
+        assertEq(bridge.balanceOf(attacker), 0);
+    }
+
     function test_changedRecipientIsRejected() public {
         BadBridge.MembershipOutput memory output = abi.decode(proof.publicValues, (BadBridge.MembershipOutput));
         output.kvPairs[0].value = abi.encodePacked(address(0xBAD));

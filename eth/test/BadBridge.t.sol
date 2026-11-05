@@ -89,6 +89,24 @@ contract BadBridgeTest is BadBridgeBase {
         assertEq(bridge.ownerOf(1), vault);
     }
 
+    function test_thirdPartyClaimMintsToRecipient() public {
+        address alice = makeAddr("alice");
+        address attacker = makeAddr("attacker");
+        bridge.submitBatch(HEIGHT, cs, proofFor(kv(key(ESCROW, "b", 1), abi.encodePacked(alice))));
+        bridge.submitBatch(HEIGHT, cs, proofFor(kv(key(ESCROW, "b", 2), abi.encodePacked(alice))));
+
+        vm.prank(attacker);
+        bridge.claim(1);
+        vm.prank(attacker);
+        bridge.claimMany(ids(2, 2, 2));
+
+        assertEq(bridge.ownerOf(1), alice);
+        assertEq(bridge.ownerOf(2), alice);
+        assertEq(bridge.balanceOf(attacker), 0);
+        assertEq(bridge.getVotes(attacker), 0);
+        assertEq(bridge.getVotes(alice), 2);
+    }
+
     function test_parseRejects() public {
         address alice = makeAddr("alice");
         bytes memory good = abi.encodePacked(alice);
@@ -352,7 +370,7 @@ contract BadBridgeVotesTest is BadBridgeBase {
     function test_delegateBySig() public {
         (address signer, uint256 pk) = makeAddrAndKey("signer");
         proveAndClaim(1, signer);
-        uint256 expiry = block.timestamp + 1 hours;
+        uint256 expiry = vm.getBlockTimestamp() + 1 hours;
         (uint8 v, bytes32 r, bytes32 s) = signDelegation(pk, carol, 0, expiry);
 
         bridge.delegateBySig(carol, 0, expiry, v, r, s);

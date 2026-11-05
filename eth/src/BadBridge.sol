@@ -122,6 +122,7 @@ contract BadBridge is ERC721, ERC721Votes {
     function submitBatch(uint64 proofHeight, ConsensusState calldata cs, SP1Proof calldata sp1Proof) external {
         ISP1ICS07Tendermint client = lightClient();
         // getConsensusStateHash still answers on a frozen client, membership doesn't
+        // forge-lint: disable-next-line(unused-return)
         (,,,,, bool isFrozen,) = client.clientState();
         if (isFrozen) revert ClientFrozen();
         // anchor to the canonical client's stored root, same checks the client does for membership
@@ -138,6 +139,7 @@ contract BadBridge is ERC721, ERC721Votes {
             // replay protection is keyed on token id, a record can show up in many proofs
             if (proven[tokenId] == address(0)) {
                 proven[tokenId] = recipient;
+                // forge-lint: disable-next-line(reentrancy-events)
                 emit Proven(tokenId, recipient);
             }
         }
@@ -148,6 +150,7 @@ contract BadBridge is ERC721, ERC721Votes {
         // _mint reverts if the token exists, so a second claim can't mint twice. That only holds
         // because nothing can burn: a burn path would need a claimed flag in _recipient. Not _safeMint:
         // a recipient contract without onERC721Received would strand the kid forever.
+        // forge-lint: disable-next-line(unsafe-oz-erc721-mint)
         _mint(_recipient(tokenId), tokenId);
     }
 
@@ -157,6 +160,7 @@ contract BadBridge is ERC721, ERC721Votes {
             uint32 tokenId = tokenIds[i];
             address to = _recipient(tokenId);
             // already claimed by someone, skip so one front-run claim can't sink the batch
+            // forge-lint: disable-next-line(unsafe-oz-erc721-mint)
             if (_ownerOf(tokenId) == address(0)) _mint(to, tokenId);
         }
     }
@@ -188,8 +192,10 @@ contract BadBridge is ERC721, ERC721Votes {
 
     /// @dev Whole attack surface. Path must be exactly ["wasm", 0x03 || ESCROW || "b" || u32 BE] with a 20-byte value.
     function parse(KVPair memory kv, uint256 index) public view returns (uint32 tokenId, address recipient) {
+        // forge-lint: disable-next-line(require-revert-in-loop)
         if (kv.path.length != 2 || keccak256(kv.path[0]) != keccak256("wasm")) revert BadPath(index);
         bytes memory key = kv.path[1];
+        // forge-lint: disable-next-line(require-revert-in-loop)
         if (key.length != 38 || key[0] != 0x03 || key[33] != "b" || kv.value.length != 20) revert BadPath(index);
 
         bytes32 addr;
@@ -199,6 +205,7 @@ contract BadBridge is ERC721, ERC721Votes {
             tokenId := shr(224, mload(add(key, 66)))
             recipient := shr(96, mload(add(value, 32)))
         }
+        // forge-lint: disable-next-line(require-revert-in-loop)
         if (addr != ESCROW) revert BadPath(index);
     }
 
@@ -221,6 +228,7 @@ contract BadBridge is ERC721, ERC721Votes {
     /// @dev The one place both claim paths check a kid was proven.
     function _recipient(uint32 tokenId) private view returns (address to) {
         to = proven[tokenId];
+        // forge-lint: disable-next-line(require-revert-in-loop)
         if (to == address(0)) revert NotProven(tokenId);
     }
 }

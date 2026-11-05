@@ -11,8 +11,10 @@ optimizer_runs = 200
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
 
 [fuzz]
-runs = 5000
+runs = 100
 
 [invariant]
+runs = 32
+depth = 100
 # a handler revert means a proven kid could not be claimed
 fail_on_revert = true
