@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Instantiate the escrow contract for an explicitly chosen collection and temporary EmergencyUnlock admin.
-# No CosmWasm admin (--no-admin), so nobody can ever migrate the code.
+# Instantiate the escrow contract for an explicitly chosen collection and temporary CosmWasm admin.
+# The CosmWasm admin is the EmergencyUnlock admin. It can also migrate until cleared.
 #
 # Required env: CW721, ADMIN, FROM_KEY. Optional: NODE.
-# Renounce the internal ADMIN before opening the bridge to public deposits.
+# Clear the CosmWasm admin (clear-contract-admin) before opening the bridge to public deposits.
 
 set -euo pipefail
 
@@ -30,7 +30,7 @@ done
 echo "Collection: $CW721; temporary admin: $ADMIN; signer: $FROM_KEY; code: $code_id" >&2
 
 gaiad tx wasm instantiate "$code_id" \
-  '{"cw721":"'"$CW721"'","admin":"'"$ADMIN"'"}' \
-  --label "$label" --no-admin \
+  '{"cw721":"'"$CW721"'"}' \
+  --label "$label" --admin "$ADMIN" \
   --from "$FROM_KEY" --chain-id cosmoshub-4 --gas auto --gas-adjustment 1.3 --gas-prices 0.005uatom \
   --node "$NODE" -y
