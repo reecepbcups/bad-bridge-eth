@@ -1,4 +1,4 @@
-import { bytesToHex } from 'viem'
+import { bytesToHex, keccak256, toHex } from 'viem'
 import type { Deployment } from '../../config/deployments'
 import { decodeBech32 } from '../bech32'
 import { typicalClaimGas } from '../eth/gas'
@@ -16,6 +16,7 @@ import {
   type WalletOption,
   type WalletState,
 } from '../types'
+import type { ProveKidWriter } from '../prove'
 import type { DemoChain, DemoSim, DemoWallet } from './sim'
 
 // Wraps the synchronous sim in the async adapter interfaces, with its latency, signing delays and failures.
@@ -43,6 +44,8 @@ const DEMO_ROUTER_IMPLEMENTATION: EthAddress = '0x17fa3A98D0239a399927C7c3CCdE14
 const DEMO_HUB_CLIENT_ID = '08-wasm-1369'
 /** 2 gwei. */
 const DEMO_GAS_PRICE = 2_000_000_000n
+
+const hash = (label: string) => keccak256(toHex(label))
 
 function delay(ms: number): Promise<void> {
   return ms > 0 ? new Promise((resolve) => setTimeout(resolve, ms)) : Promise.resolve()
@@ -204,6 +207,33 @@ export function createDemoEthWriter(sim: DemoSim, address: EthAddress): EthWrite
         stage.done()
       }
     },
+  }
+}
+
+/** Fakes a proof: a pause, the wallet prompt, then the kids are proven. No Succinct, no PROVE. */
+export function createDemoProveKidWriter(sim: DemoSim): ProveKidWriter {
+  const notInDemo = () => Promise.reject(new BridgeError('Unknown', 'demo: not supported'))
+  const proveKids: ProveKidWriter['proveKids'] = async (ids, options) => {
+    options?.onStage?.('proving')
+    await delay(sim.timeline.proveMs)
+    options?.onStage?.('signing')
+    const proved = await later(sim.timeline.signMs, () => sim.prove(ids))
+    options?.onStage?.('confirming')
+    await delay(sim.timeline.latencyMs)
+    return { txHash: hash(`demo:prove:${proved.join(',')}`), proved }
+  }
+  return {
+    proveKids,
+    proveKid: async (id, options) => ({ txHash: (await proveKids([id], options)).txHash }),
+    submitRequest: notInDemo,
+    proveBalance: () => Promise.resolve(0n),
+    registerProgram: () => Promise.resolve(),
+    gasPrice: () => Promise.resolve(DEMO_GAS_PRICE),
+    quoteProve: () => Promise.resolve(0n),
+    ethUsdPrice: () => Promise.resolve(0),
+    walletProveBalance: () => Promise.resolve(0n),
+    buyProve: notInDemo,
+    depositProve: notInDemo,
   }
 }
 

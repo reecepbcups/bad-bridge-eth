@@ -64,7 +64,7 @@ export function AboutView() {
           <li>
             <span className="n">2</span>
             <span className="where mid">In between</span>
-            <b>We prove they left</b>A zero-knowledge proof shows Ethereum that the kids really are locked on the Hub.
+            <b>You prove they left</b>From your wallet, a zero-knowledge proof shows Ethereum that the kids really are locked on the Hub.
           </li>
           <li>
             <span className="n">3</span>
@@ -93,8 +93,8 @@ export function AboutView() {
           <details>
             <summary>Why does it take a while?</summary>
             <p>
-              Ethereum only learns about new Hub blocks when IBC Eureka relays a transfer. After that, the prover bundles
-              waiting kids into one proof. So the wait depends on how far behind Ethereum is
+              Ethereum only learns about new Hub blocks when IBC Eureka relays a transfer. After that, you prove
+              them, and one proof covers all your waiting kids. So the wait depends on how far behind Ethereum is
               {lag ? <>: right now that's {lag}.</> : '.'}
               {/* COPY: FAQ wait time */}
             </p>
@@ -127,7 +127,7 @@ export function AboutView() {
               {cost
                 ? `: right now about ${formatEth(cost.fee)} for one kid, plus about ${formatEth((CLAIM_GAS_EXTRA * BigInt(cost.gasPrice)).toString())} for each extra kid in the same claim.`
                 : ': about 79,000 gas for one kid, plus about 30,000 for each extra kid in the same claim.'}{' '}
-              The prover pays for the proof.
+              Proving adds about 0.33 PROVE plus about 0.002 ETH to submit it, the same for 1 kid or 50.
               {/* COPY: FAQ cost */}
             </p>
           </details>

@@ -26,7 +26,7 @@ const LEDE: Readonly<Record<string, string>> = {
   locked: 'Locked in the Hub escrow, waiting for Ethereum to catch up.',
   'catching-up': 'On the bridge: waiting for Ethereum to catch up to the Hub.',
   crossing: 'On the bridge.',
-  proving: 'On the bridge: Ethereum caught up, and the proof is being made.',
+  proving: "On the bridge: Ethereum caught up, and it's waiting for you to prove it.",
   ready: 'Made it across! The proof landed on Ethereum, so it can be claimed.',
   'home-eth': 'Home on Ethereum.',
 }
@@ -114,12 +114,11 @@ function Kid({ id }: { id: KidId }) {
           )}
           {t.stage === 'ready' && ethWallet.wrongChain && <SwitchChain />}
           {claim.failure && <ErrorNote error={claim.failure.error} action="claim" walletName={ethWallet.walletName} tokenId={id} />}
-          {!deployment.demo && t.stage === 'proving' && (
+          {t.stage === 'proving' && (
             <div className="row start">
               <ProveButton ids={[id]} expectedRecipients={t.recipient ? new Map([[id, t.recipient]]) : undefined} flow={prove}>
-                Prove it yourself
+                Prove it
               </ProveButton>
-              <span className="hint">Proves it now, from your wallet.</span>
             </div>
           )}
           {!deployment.demo && t.stage === 'proving' && <ProveBalanceNote />}

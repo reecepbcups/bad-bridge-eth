@@ -90,9 +90,9 @@ test('the demo adapter claims a ready kid', async ({ page }) => {
   await expect(page.getByRole('listitem').filter({ hasText: '#9254' }).getByText('home on Ethereum', { exact: true })).toBeVisible()
 })
 
-test('dev toolbar skips a crossing kid ahead to ready', async ({ page }) => {
+test('Prove it takes a crossing kid to ready in the demo', async ({ page }) => {
   await page.goto(`${DEMO}#/kid/8783`)
   await expect(page.locator('.kid-head').getByText('crossing', { exact: true })).toBeVisible()
-  await page.getByRole('navigation', { name: 'Demo controls' }).getByRole('button', { name: 'skip ahead' }).click()
+  await page.getByRole('button', { name: 'Prove it', exact: true }).click()
   await expect(page.getByText('ready to claim', { exact: true })).toBeVisible()
 })

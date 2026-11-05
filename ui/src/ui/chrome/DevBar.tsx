@@ -61,9 +61,6 @@ export function DevBar({ route }: { route: Route }) {
           <button type="button" aria-pressed={s.frozen} onClick={() => demo.setFrozen(!s.frozen)}>
             frozen
           </button>
-          <button type="button" aria-pressed={s.stuck} onClick={() => demo.setStuck(!s.stuck)}>
-            stuck prover
-          </button>
           <button type="button" aria-pressed={s.offline} onClick={() => demo.setOffline(!s.offline)}>
             offline
           </button>

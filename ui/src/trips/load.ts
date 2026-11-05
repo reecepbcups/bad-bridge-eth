@@ -12,7 +12,7 @@ import {
   type SendInfo,
 } from '../chain/types'
 import type { Deployment, DeploymentId } from '../config/deployments'
-import { buildTrip, compareTrips, deriveStage, type SendFacts } from './derive'
+import { buildTrip, compareTrips, type SendFacts } from './derive'
 import {
   BLOCK_SAMPLE,
   BLOCK_TIME_MS,
@@ -25,7 +25,7 @@ import {
   STALE_LAG_MINUTES,
   type TripQueryKey,
 } from './keys'
-import { firstSeenProving, forgetProving, rememberedDetails, rememberedTrip, type RememberedTrip } from './storage'
+import { rememberedDetails, rememberedTrip, type RememberedTrip } from './storage'
 import type { Health, Trip } from './types'
 
 // The reading behind the hooks, outside React. Every chain read goes through queryClient.query() on a raw
@@ -311,21 +311,13 @@ export async function loadTrips(ctx: Ctx, ids: readonly KidId[], known: Readonly
     }
   })
 
-  const now = Date.now()
-  const done: KidId[] = []
   const trips = hubFacts.map(({ id, record, recordError, send, sentAt }) => {
     const eth = statuses.get(id) ?? null
     // no record read: proven or minted still decides the stage; otherwise this kid's stage is a guess
     // (falls back to no record), reported in error rather than failing every other kid in the list
     if (recordError) errors.push(recordError)
-    const stage = deriveStage({ record, sendHeight: send?.height ?? null, client, eth })
-    let provingSince: Date | null = null
-    if (stage === 'proving') provingSince = new Date(firstSeenProving(d, id, now))
-    // locked / crossing say nothing about proving, so a first sighting survives them
-    else if (stage !== 'locked' && stage !== 'crossing') done.push(id)
-    return buildTrip({ tokenId: id, record, send, sentAt, client, eth, provingSince, now: new Date(now) })
+    return buildTrip({ tokenId: id, record, send, sentAt, client, eth })
   })
-  forgetProving(d, done, now)
 
   return { value: trips, error: errors[0] ?? null }
 }
@@ -340,7 +332,6 @@ export function seededTrip(ctx: Ctx, id: KidId, send: SendInfo, sentAt: Date): T
     sentAt,
     client,
     eth: null,
-    now: sentAt,
   })
 }
 
@@ -442,7 +433,7 @@ export function readOwnedKids(ctx: Ctx, owner: string): Promise<KidId[]> {
 
 /** A kid still in the wallet: the pick screen's tile. */
 export function homeTrip(id: KidId): Trip {
-  return { tokenId: id, stage: 'home-hub', recipient: null, stuck: false }
+  return { tokenId: id, stage: 'home-hub', recipient: null }
 }
 
 /** The pick screen's order: kids still home first (ascending), then sent ones (compareTrips). */

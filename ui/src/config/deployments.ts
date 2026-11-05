@@ -68,7 +68,7 @@ export interface Deployment {
   hub: HubConfig
   eth: EthConfig
   explorer: Explorers
-  /** The bridge's source code, linked from About and the stuck-proving note. */
+  /** The bridge's source code, linked from About and the error page. */
   sourceUrl: string
 }
 

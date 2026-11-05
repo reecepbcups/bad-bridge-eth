@@ -32,8 +32,6 @@ export interface SeedTrip {
   proven: boolean
   /** Minted on Ethereum (claimed). */
   minted: boolean
-  /** Still proving: the proof lands this long after EPOCH. */
-  provesInMs?: number
 }
 
 const MIN = 60_000
@@ -41,7 +39,7 @@ const MIN = 60_000
 /** The tracker's example trips (one ready, one crossing, one home) plus a stranger's two. */
 export const TRIPS: readonly SeedTrip[] = [
   { id: 9254, sender: OTHER_HUB, recipient: DEMO_ETH, sentAt: Date.parse('2026-09-27T04:12:00Z'), proven: true, minted: false },
-  { id: 8783, sender: OTHER_HUB, recipient: DEMO_ETH, sentAt: EPOCH - 22 * MIN, proven: false, minted: false, provesInMs: 10 * MIN },
+  { id: 8783, sender: OTHER_HUB, recipient: DEMO_ETH, sentAt: EPOCH - 22 * MIN, proven: false, minted: false },
   { id: 8073, sender: DEMO_HUB, recipient: DEMO_ETH, sentAt: Date.parse('2026-09-23T18:30:00Z'), proven: true, minted: true },
   { id: 1234, sender: OTHER_HUB, recipient: STRANGER_ETH, sentAt: Date.parse('2026-09-25T10:00:00Z'), proven: true, minted: true },
   { id: 42, sender: OTHER_HUB, recipient: STRANGER_ETH, sentAt: Date.parse('2026-09-26T12:00:00Z'), proven: true, minted: false },

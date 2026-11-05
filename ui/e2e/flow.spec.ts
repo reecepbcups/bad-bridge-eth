@@ -8,6 +8,7 @@ import {
   demoReady,
   MULTICALL3,
   pickAndReview,
+  proveInSim,
   sendButton,
   skipAhead,
   trackErrors,
@@ -30,8 +31,8 @@ test('send and claim announce writer progress and retain keyboard focus', async 
   await expect(page).toHaveTitle('Crossing · Bad Bridge')
   await expect(page.getByRole('img', { name: /waiting for Ethereum to catch up/ })).toBeVisible()
   await skipAhead(page)
-  await expect(page.getByRole('img', { name: /now being proven/ })).toBeVisible()
-  await skipAhead(page)
+  await expect(page.getByRole('img', { name: /waiting for you to prove it/ })).toBeVisible()
+  await proveInSim(page, [9176])
   const row = page.getByRole('listitem').filter({ hasText: '#9176' })
   await row.getByRole('button', { name: 'Claim', exact: true }).click()
   const claiming = row.getByRole('button', { name: 'Check MetaMask…' })
@@ -69,9 +70,9 @@ test('happy path: connect both wallets, send two kids, cross, and batch claim', 
   for (const id of [9176, 6413]) await expect(page.getByRole('listitem').filter({ hasText: `#${id}` })).toBeVisible()
   await expect(page.getByRole('img', { name: /waiting for Ethereum to catch up/ })).toBeVisible()
   await skipAhead(page)
-  await expect(page.getByRole('img', { name: /now being proven/ })).toBeVisible()
-  await skipAhead(page)
-  // Includes the ready demo fixture; the other fixture is still being proven.
+  await expect(page.getByRole('img', { name: /waiting for you to prove it/ })).toBeVisible()
+  await proveInSim(page, [9176, 6413])
+  // Includes the ready demo fixture; the other fixture is still waiting for a proof.
   await page.getByRole('button', { name: 'Claim all 3' }).click()
   await expect(page.getByRole('link', { name: '#9176', exact: true })).toHaveCount(0)
   await expect(page.getByRole('status').filter({ hasText: 'Claimed' })).toBeVisible()
@@ -93,7 +94,7 @@ test('a kid claimed from another view leaves Crossing and appears in My Eth kids
   await sendButton(page).click()
   await expect(page).toHaveURL(/#\/crossing$/)
   await skipAhead(page)
-  await skipAhead(page)
+  await proveInSim(page, [663])
   await page.getByRole('link', { name: '#663', exact: true }).click()
   await page.getByRole('button', { name: 'Claim #663' }).click()
   await expect(page.locator('.kid-head').getByText('home on Ethereum', { exact: true })).toBeVisible()

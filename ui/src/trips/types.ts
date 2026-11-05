@@ -31,16 +31,6 @@ export interface Trip {
   owner?: EthAddress
   /** catching-up only: Hub blocks until Ethereum's client passes Hs (Hs + 1 - client height, at least 1). */
   blocksToGo?: number
-  /**
-   * proving only: when this browser first saw the kid proving. The checkpoint passed at or before this
-   * (there are no client events to tell exactly), so "proving for at least now - provingSince".
-   */
-  provingSince?: Date
-  /**
-   * Seen proving for more than 30 minutes (see provingSince): no prover has picked it up. Never set while the
-   * client is frozen, since then nothing can be proven and the site-wide "paused" state explains it.
-   */
-  stuck: boolean
 }
 
 /** Options for the trip hooks. */

@@ -303,69 +303,8 @@ describe('polling', () => {
   })
 })
 
-describe('stuck', () => {
-  const T0 = Date.parse('2026-09-27T17:00:00Z')
-
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(T0)
-  })
-
-  it('turns on after 30 minutes seen proving, and survives a reload', async () => {
-    const chain = everyStage()
-    const first = fakeBridge(chain)
-    const { result, unmount } = renderHook(() => useTrip(1), { wrapper: first.wrapper })
-    expect(await loaded(result)).toMatchObject({ stage: 'proving', stuck: false, provingSince: new Date(T0) })
-
-    vi.setSystemTime(T0 + 29 * MIN)
-    act(() => result.current.refetch())
-    await waitFor(() => expect(result.current.isFetching).toBe(false))
-    expect(result.current.data?.stuck).toBe(false)
-
-    vi.setSystemTime(T0 + 31 * MIN)
-    act(() => result.current.refetch())
-    await waitFor(() => expect(result.current.data?.stuck).toBe(true))
-    unmount()
-
-    // a reload: fresh cache and memory, same localStorage
-    resetTripStorage()
-    const again = renderHook(() => useTrip(1), { wrapper: fakeBridge(chain).wrapper })
-    expect(await loaded(again.result)).toMatchObject({ stuck: true, provingSince: new Date(T0) })
-  })
-
-  it('starts the clock at first sight on a fresh device', async () => {
-    const { wrapper } = fakeBridge(everyStage())
-    const { result } = renderHook(() => useTrip(1), { wrapper })
-    // the checkpoint passed long ago, but this device has only just seen it
-    expect(await loaded(result)).toMatchObject({ stage: 'proving', stuck: false })
-  })
-
-  it('stops, and forgets the sighting, once the proof lands', async () => {
-    const chain = everyStage()
-    const { wrapper } = fakeBridge(chain)
-    const { result } = renderHook(() => useTrip(1), { wrapper })
-    await loaded(result)
-    vi.setSystemTime(T0 + 45 * MIN)
-    chain.proven.set(1, ALICE)
-    act(() => result.current.refetch())
-    await waitFor(() => expect(result.current.data?.stage).toBe('ready'))
-    expect(result.current.data).toMatchObject({ stuck: false })
-    expect(result.current.data?.provingSince).toBeUndefined()
-    expect(localStorage.getItem(`bad-bridge:proving:${LIVE_ID}`)).toBe('{}')
-  })
-
-  it('is never set while the client is frozen (the paused banner explains it)', async () => {
-    const chain = everyStage()
-    chain.client.frozen = true
-    localStorage.setItem(`bad-bridge:proving:${LIVE_ID}`, JSON.stringify({ 1: T0 - 60 * MIN }))
-    const { wrapper } = fakeBridge(chain)
-    const { result } = renderHook(() => useTrip(1), { wrapper })
-    expect(await loaded(result)).toMatchObject({ stage: 'proving', stuck: false })
-  })
-})
-
 describe('without localStorage', () => {
-  it('sends, remembers for this tab, and tracks stuck in memory', async () => {
+  it('sends and remembers for this tab', async () => {
     const restore = breakLocalStorage()
     try {
       const chain = everyStage()
@@ -375,7 +314,7 @@ describe('without localStorage', () => {
       const { result } = renderHook(() => ({ send: useSendKids(), remembered: useRememberedTrips(), trip: useTrip(1) }), { wrapper })
       await act(() => result.current.send.run([10], ALICE))
       expect(result.current.remembered).toEqual([10])
-      await waitFor(() => expect(result.current.trip.data?.provingSince).toBeInstanceOf(Date))
+      await waitFor(() => expect(result.current.trip.data?.stage).toBe('proving'))
     } finally {
       restore()
     }

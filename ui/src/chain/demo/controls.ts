@@ -6,16 +6,14 @@ import type { DemoChain, DemoSnapshot } from './sim'
 export interface DemoControls {
   /** Current sim state: clock, heights, toggles, wallets. */
   snapshot: DemoSnapshot
-  /** Jump to the next relay or proof for a sent kid. False if nothing can happen. */
+  /** Jump to the next relay for a sent kid. False if nothing can happen. */
   skip(): boolean
-  /** Move the virtual clock forward, e.g. 30 min to trip the stuck-proving note. */
+  /** Move the virtual clock forward. */
   advance(ms: number): void
   /** Stop or start the virtual clock. */
   setPaused(on: boolean): void
   /** Freeze the light client: no relays or proofs, sends should be disabled, claims still work. */
   setFrozen(on: boolean): void
-  /** Stall the prover: relays happen, proofs don't. */
-  setStuck(on: boolean): void
   /** Fail every read with Network. */
   setOffline(on: boolean): void
   /** Make the next write that can fail with `code` fail with it, once. null clears it. */

@@ -1,7 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
-  firstSeenProving,
-  forgetProving,
   rememberedDetails,
   rememberedTrip,
   rememberedTrips,
@@ -128,37 +126,8 @@ describe('remembered trips', () => {
     try {
       expect(() => rememberTrips('demo', [{ id: 4, height: 10 }])).not.toThrow()
       expect(rememberedTrip('demo', 4)).toEqual({ id: 4, height: 10 })
-      expect(firstSeenProving('demo', 4, T0)).toBe(T0)
-      expect(firstSeenProving('demo', 4, T0 + 1000)).toBe(T0)
     } finally {
       restore()
     }
-  })
-})
-
-describe('first sighting in proving', () => {
-  it('records the first sighting and keeps it', () => {
-    expect(firstSeenProving('demo', 7, T0)).toBe(T0)
-    expect(firstSeenProving('demo', 7, T0 + 60_000)).toBe(T0)
-    resetTripStorage()
-    expect(firstSeenProving('demo', 7, T0 + 120_000)).toBe(T0)
-  })
-
-  it('forgets kids that left proving', () => {
-    firstSeenProving('demo', 7, T0)
-    forgetProving('demo', [7], T0 + 1)
-    resetTripStorage()
-    expect(firstSeenProving('demo', 7, T0 + 5)).toBe(T0 + 5)
-  })
-
-  it('ignores junk, future and month-old sightings', () => {
-    localStorage.setItem(
-      'bad-bridge:proving:demo',
-      JSON.stringify({ 1: T0 - 1000, 2: T0 + 1000, 3: T0 - 40 * 24 * 3_600_000, x: T0, 4: 'soon' }),
-    )
-    expect(firstSeenProving('demo', 1, T0)).toBe(T0 - 1000)
-    expect(firstSeenProving('demo', 2, T0)).toBe(T0)
-    expect(firstSeenProving('demo', 3, T0)).toBe(T0)
-    expect(firstSeenProving('demo', 4, T0)).toBe(T0)
   })
 })

@@ -420,7 +420,7 @@ function afterClaim(ctx: Ctx, ids: readonly KidId[]): void {
   const claimed = new Set(ids)
   // minted to the proven recipient; the refresh below confirms (a kid that somehow wasn't flips back)
   const flip = (t: Trip): Trip =>
-    claimed.has(t.tokenId) && t.stage === 'ready' && t.recipient ? { ...t, stage: 'home-eth', owner: t.recipient, stuck: false } : t
+    claimed.has(t.tokenId) && t.stage === 'ready' && t.recipient ? { ...t, stage: 'home-eth', owner: t.recipient } : t
   qc.setQueriesData<WithError<Trip[]>>({ queryKey: keys.tripsAll(d) }, (old) =>
     old ? { ...old, value: old.value.map(flip).sort(compareTrips) } : old,
   )

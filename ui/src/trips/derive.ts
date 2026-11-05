@@ -1,9 +1,6 @@
 import type { ClientStatus, EscrowRecord, EthAddress, HubAddress, KidEthStatus, KidId } from '../chain/types'
 import type { Stage, Trip } from './types'
 
-/** Seen proving longer than this and no prover has picked it up. */
-export const STUCK_AFTER_MS = 30 * 60_000
-
 /** Chain facts about one kid. null means unknown (not found, or the read failed). */
 export interface StageInput {
   /** Escrow record; null if the kid never left the Hub. */
@@ -52,11 +49,6 @@ export function deriveStage({ record, sendHeight, client, eth }: StageInput): St
 /** catching-up: Hub blocks until the client passes Hs, i.e. reaches Hs + 1. Never negative. */
 export function blocksToGo(sendHeight: number, clientHeight: number): number {
   return Math.max(0, sendHeight + 1 - clientHeight)
-}
-
-/** Seen proving since `since` for longer than STUCK_AFTER_MS. `since` is the first sighting (see provingSince). */
-export function isStuck(stage: Stage, since: Date | null, now: Date): boolean {
-  return stage === 'proving' && since !== null && now.getTime() - since.getTime() > STUCK_AFTER_MS
 }
 
 /** Nothing left to happen: the kid is minted. Hooks stop polling trips that are all final. */
@@ -112,10 +104,6 @@ export interface TripInput {
   sentAt?: Date
   client: ClientStatus | null
   eth: KidEthStatus | null
-  /** First time this browser saw the kid proving (only read when the stage is proving). */
-  provingSince?: Date | null
-  /** Wall-clock now, for stuck. */
-  now: Date
 }
 
 /** Assembles a Trip from chain facts. Pure: the hooks do the reading and the remembering. */
@@ -123,13 +111,7 @@ export function buildTrip(input: TripInput): Trip {
   const { tokenId, record, send, client, eth } = input
   const stage = deriveStage({ record, sendHeight: send?.height ?? null, client, eth })
   const recipient: EthAddress | null = record?.recipient ?? eth?.proven ?? null
-  const since = stage === 'proving' ? (input.provingSince ?? null) : null
-  const trip: Trip = {
-    tokenId,
-    stage,
-    recipient,
-    stuck: !client?.frozen && isStuck(stage, since, input.now),
-  }
+  const trip: Trip = { tokenId, stage, recipient }
   if (send) {
     trip.sendHeight = send.height
     if (send.txHash) trip.sendTx = send.txHash
@@ -138,6 +120,5 @@ export function buildTrip(input: TripInput): Trip {
   if (input.sentAt) trip.sentAt = input.sentAt
   if (eth?.owner) trip.owner = eth.owner
   if (stage === 'catching-up' && send && client) trip.blocksToGo = blocksToGo(send.height, client.latestHeight)
-  if (since) trip.provingSince = since
   return trip
 }

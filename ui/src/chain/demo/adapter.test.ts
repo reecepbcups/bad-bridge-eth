@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { DEPLOYMENTS } from '../../config/deployments'
 import { checkConfig } from '../../trips/sanity'
+import type { ProveStage } from '../prove'
 import type { ClaimStage, SendStage } from '../types'
-import { createDemoEthWriter, createDemoHubWriter, createDemoReaders } from './adapter'
+import { createDemoEthWriter, createDemoHubWriter, createDemoProveKidWriter, createDemoReaders } from './adapter'
 import { DEMO_ETH, DEMO_HUB } from './seed'
 import { DemoSim, INSTANT } from './sim'
 
@@ -38,11 +39,22 @@ describe('demo writers report progress like the real ones', () => {
     expect(stages).toEqual(['simulating'])
   })
 
+  it('prove: fakes a proof, and the kid is ready', async () => {
+    const sim = newSim()
+    sim.commitSend(DEMO_HUB, [9176], DEMO_ETH)
+    sim.skip()
+    const stages: ProveStage[] = []
+    const result = await createDemoProveKidWriter(sim).proveKids([9176], { onStage: (s) => stages.push(s) })
+    expect(stages).toEqual(['proving', 'signing', 'confirming'])
+    expect(result.proved).toEqual([9176])
+    expect(sim.kidStatus([9176]).get(9176)?.proven).toBe(DEMO_ETH)
+  })
+
   it('claim: signing, then confirming', async () => {
     const sim = newSim()
     sim.commitSend(DEMO_HUB, [9176], DEMO_ETH)
     sim.skip()
-    sim.skip()
+    sim.prove([9176])
     const stages: ClaimStage[] = []
     await createDemoEthWriter(sim, DEMO_ETH).claim([9176], { onStage: (s) => stages.push(s) })
     expect(stages).toEqual(['signing', 'confirming'])

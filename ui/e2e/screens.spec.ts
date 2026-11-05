@@ -7,6 +7,7 @@ import {
   dismissToasts,
   MULTICALL3,
   pickAndReview,
+  proveInSim,
   SCHEMES,
   sendButton,
   skipAhead,
@@ -91,7 +92,7 @@ const BRIDGE_WALK: Stop[] = [
     'crossing-proving',
     async (page) => {
       await skipAhead(page)
-      await expect(page.getByRole('img', { name: /now being proven/ })).toBeVisible()
+      await expect(page.getByRole('img', { name: /waiting for you to prove it/ })).toBeVisible()
       // let the walkers finish walking
       await page.waitForTimeout(2800)
     },
@@ -99,7 +100,7 @@ const BRIDGE_WALK: Stop[] = [
   [
     'claim',
     async (page) => {
-      await skipAhead(page)
+      await proveInSim(page, [9176, 6413])
       await expect(page.getByRole('button', { name: 'Claim all 3' })).toBeVisible()
     },
   ],
@@ -121,7 +122,7 @@ const OTHER_STOPS: Stop[] = [
     async (page) => {
       await page.goto(`${DEMO}#/crossing`)
       await expect(page.getByRole('link', { name: '#9254', exact: true })).toBeVisible()
-      await expect(page.getByRole('img', { name: /now being proven/ })).toBeVisible()
+      await expect(page.getByRole('img', { name: /waiting for you to prove it/ })).toBeVisible()
     },
   ],
   [
