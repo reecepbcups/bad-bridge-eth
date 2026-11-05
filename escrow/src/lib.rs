@@ -16,7 +16,6 @@ pub const RECORD_PREFIX: u8 = b'b';
 pub const SENDER_PREFIX: u8 = b's';
 
 const CW721: Item<Addr> = Item::new("cw721");
-const ADMIN: Item<Addr> = Item::new("admin");
 
 #[derive(thiserror::Error, Debug, PartialEq)]
 pub enum ContractError {
@@ -41,8 +40,6 @@ pub enum ContractError {
 #[cw_serde]
 pub struct InstantiateMsg {
     pub cw721: String,
-    /// Sole address allowed to call EmergencyUnlock.
-    pub admin: String,
 }
 
 /// cw721 receiver hook payload, inlined to avoid depending on a specific cw721 version.
@@ -57,15 +54,13 @@ pub struct Cw721ReceiveMsg {
 #[cw_serde]
 pub enum ExecuteMsg {
     ReceiveNft(Cw721ReceiveMsg),
-    /// Admin-only. Returns the given escrowed tokens to the Cosmos address that sent them,
+    /// CosmWasm admin only. Returns the given escrowed tokens to the Cosmos address that sent them,
     /// bypassing the Ethereum leg entirely. Only safe if the Eureka client stored no Hub root
     /// since the token was sent. Checking BadBridge.sol's `Proven` events isn't enough: any
     /// stored root still proves the old record after the refund, minting the same token twice
     /// across chains (see `adminLive` in spec/badbridge.qnt). The refund goes to whoever called
     /// send_nft, which can be an approved operator instead of the owner.
     EmergencyUnlock { token_ids: Vec<u32> },
-    /// Admin-only. Permanently removes the admin, disabling EmergencyUnlock forever.
-    RenounceAdmin {},
 }
 
 /// cw721 TransferNft payload, inlined for the same reason as Cw721ReceiveMsg above.
@@ -108,18 +103,15 @@ pub fn sender_key(token_id: u32) -> Vec<u8> {
 #[entry_point]
 pub fn instantiate(deps: DepsMut, _env: Env, _info: MessageInfo, msg: InstantiateMsg) -> Result<Response, ContractError> {
     let cw721 = deps.api.addr_validate(&msg.cw721)?;
-    let admin = deps.api.addr_validate(&msg.admin)?;
     CW721.save(deps.storage, &cw721)?;
-    ADMIN.save(deps.storage, &admin)?;
-    Ok(Response::new().add_attribute("cw721", cw721).add_attribute("admin", admin))
+    Ok(Response::new().add_attribute("cw721", cw721))
 }
 
 #[entry_point]
-pub fn execute(deps: DepsMut, _env: Env, info: MessageInfo, msg: ExecuteMsg) -> Result<Response, ContractError> {
+pub fn execute(deps: DepsMut, env: Env, info: MessageInfo, msg: ExecuteMsg) -> Result<Response, ContractError> {
     match msg {
         ExecuteMsg::ReceiveNft(rcv) => receive_nft(deps, info, rcv),
-        ExecuteMsg::EmergencyUnlock { token_ids } => emergency_unlock(deps, info, token_ids),
-        ExecuteMsg::RenounceAdmin {} => renounce_admin(deps, info),
+        ExecuteMsg::EmergencyUnlock { token_ids } => emergency_unlock(deps, env, info, token_ids),
     }
 }
 
@@ -160,8 +152,8 @@ fn receive_nft(deps: DepsMut, info: MessageInfo, rcv: Cw721ReceiveMsg) -> Result
 /// Admin-only escape hatch. See ExecuteMsg::EmergencyUnlock for the double-spend caveat. All-or-
 /// nothing over `token_ids`: an id that isn't currently escrowed fails the whole call, so a typo
 /// can't silently unlock a different set than the admin intended.
-fn emergency_unlock(deps: DepsMut, info: MessageInfo, token_ids: Vec<u32>) -> Result<Response, ContractError> {
-    ensure_admin(deps.as_ref(), &info)?;
+fn emergency_unlock(deps: DepsMut, env: Env, info: MessageInfo, token_ids: Vec<u32>) -> Result<Response, ContractError> {
+    ensure_admin(deps.as_ref(), &env, &info)?;
     let cw721 = CW721.load(deps.storage)?;
 
     let mut msgs = Vec::with_capacity(token_ids.len());
@@ -187,15 +179,9 @@ fn emergency_unlock(deps: DepsMut, info: MessageInfo, token_ids: Vec<u32>) -> Re
         .add_messages(msgs))
 }
 
-fn renounce_admin(deps: DepsMut, info: MessageInfo) -> Result<Response, ContractError> {
-    ensure_admin(deps.as_ref(), &info)?;
-    ADMIN.remove(deps.storage);
-    Ok(Response::new().add_attribute("action", "renounce_admin"))
-}
-
-// a renounced admin is gone from storage, so nobody passes
-fn ensure_admin(deps: Deps, info: &MessageInfo) -> Result<(), ContractError> {
-    match ADMIN.may_load(deps.storage)? {
+// the chain's CosmWasm admin, so clear-contract-admin disables EmergencyUnlock forever
+fn ensure_admin(deps: Deps, env: &Env, info: &MessageInfo) -> Result<(), ContractError> {
+    match deps.querier.query_wasm_contract_info(&env.contract.address)?.admin {
         Some(admin) if admin == info.sender => Ok(()),
         _ => Err(ContractError::Unauthorized),
     }
@@ -233,21 +219,31 @@ fn pending(deps: Deps, start_after: Option<u32>, limit: Option<u32>) -> Vec<Pend
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env};
-    use cosmwasm_std::Storage;
+    use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env, MockApi, MockQuerier};
+    use cosmwasm_std::{ContractInfoResponse, ContractResult, MemoryStorage, OwnedDeps, Storage, SystemResult, WasmQuery};
 
-    fn setup() -> (cosmwasm_std::OwnedDeps<cosmwasm_std::MemoryStorage, cosmwasm_std::testing::MockApi, cosmwasm_std::testing::MockQuerier>, Addr, Addr) {
+    type MockDeps = OwnedDeps<MemoryStorage, MockApi, MockQuerier>;
+
+    fn setup() -> (MockDeps, Addr, Addr) {
         let mut deps = mock_dependencies();
         let cw721 = deps.api.addr_make("cw721");
         let admin = deps.api.addr_make("admin");
-        instantiate(
-            deps.as_mut(),
-            mock_env(),
-            message_info(&admin, &[]),
-            InstantiateMsg { cw721: cw721.to_string(), admin: admin.to_string() },
-        )
-        .unwrap();
+        instantiate(deps.as_mut(), mock_env(), message_info(&admin, &[]), InstantiateMsg { cw721: cw721.to_string() })
+            .unwrap();
+        set_wasm_admin(&mut deps, Some(admin.clone()));
         (deps, cw721, admin)
+    }
+
+    // stands in for wasmd's contract info, which is where the admin lives
+    fn set_wasm_admin(deps: &mut MockDeps, admin: Option<Addr>) {
+        let me = mock_env().contract.address;
+        deps.querier.update_wasm(move |q| match q {
+            WasmQuery::ContractInfo { contract_addr } if *contract_addr == me.as_str() => {
+                let info = ContractInfoResponse::new(1, me.clone(), admin.clone(), false, None);
+                SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+            }
+            _ => panic!("unexpected wasm query {q:?}"),
+        });
     }
 
     fn rcv(token_id: &str, msg: &[u8]) -> ExecuteMsg {
@@ -426,17 +422,12 @@ mod tests {
     }
 
     #[test]
-    fn renounce_admin() {
+    fn cleared_wasm_admin_cannot_unlock() {
         let (mut deps, cw721, admin) = setup();
         execute(deps.as_mut(), mock_env(), message_info(&cw721, &[]), rcv("1", &[1; 20])).unwrap();
 
-        let stranger = deps.api.addr_make("stranger");
-        let err = execute(deps.as_mut(), mock_env(), message_info(&stranger, &[]), ExecuteMsg::RenounceAdmin {}).unwrap_err();
-        assert_eq!(err, ContractError::Unauthorized);
+        set_wasm_admin(&mut deps, None);
 
-        execute(deps.as_mut(), mock_env(), message_info(&admin, &[]), ExecuteMsg::RenounceAdmin {}).unwrap();
-
-        // former admin can no longer unlock or renounce again
         let err = execute(
             deps.as_mut(),
             mock_env(),
@@ -444,8 +435,6 @@ mod tests {
             ExecuteMsg::EmergencyUnlock { token_ids: vec![1] },
         )
         .unwrap_err();
-        assert_eq!(err, ContractError::Unauthorized);
-        let err = execute(deps.as_mut(), mock_env(), message_info(&admin, &[]), ExecuteMsg::RenounceAdmin {}).unwrap_err();
         assert_eq!(err, ContractError::Unauthorized);
     }
 }

@@ -9,7 +9,10 @@ use bad_bridge_escrow::{
 };
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::testing::{message_info, mock_dependencies, mock_env, MockApi, MockQuerier};
-use cosmwasm_std::{from_json, Addr, Binary, CosmosMsg, MemoryStorage, Order, OwnedDeps, Storage, WasmMsg};
+use cosmwasm_std::{
+    from_json, to_json_binary, Addr, Binary, ContractInfoResponse, ContractResult, CosmosMsg, MemoryStorage, Order,
+    OwnedDeps, Storage, SystemResult, WasmMsg, WasmQuery,
+};
 use proptest::prelude::*;
 
 type Deps = OwnedDeps<MemoryStorage, MockApi, MockQuerier>;
@@ -31,7 +34,8 @@ enum Actor {
 enum Op {
     Receive { caller: Actor, sender: u8, token_id: String, recipient: Vec<u8> },
     Unlock { caller: Actor, ids: Vec<u32> },
-    Renounce { caller: Actor },
+    // wasmd's clear-contract-admin, a chain action rather than a contract message
+    ClearAdmin,
 }
 
 #[derive(Default, Clone)]
@@ -54,8 +58,9 @@ impl Env {
         let cw721 = deps.api.addr_make("cw721");
         let admin = deps.api.addr_make("admin");
         let stranger = deps.api.addr_make("stranger");
-        let msg = InstantiateMsg { cw721: cw721.to_string(), admin: admin.to_string() };
+        let msg = InstantiateMsg { cw721: cw721.to_string() };
         instantiate(deps.as_mut(), mock_env(), message_info(&stranger, &[]), msg).unwrap();
+        set_wasm_admin(&mut deps, Some(admin.clone()));
         Env { deps, cw721, admin, stranger }
     }
 
@@ -66,6 +71,18 @@ impl Env {
             Actor::Stranger => &self.stranger,
         }
     }
+}
+
+// stands in for wasmd's contract info, which is where the admin lives
+fn set_wasm_admin(deps: &mut Deps, admin: Option<Addr>) {
+    let me = mock_env().contract.address;
+    deps.querier.update_wasm(move |q| match q {
+        WasmQuery::ContractInfo { contract_addr } if *contract_addr == me.as_str() => {
+            let info = ContractInfoResponse::new(1, me.clone(), admin.clone(), false, None);
+            SystemResult::Ok(ContractResult::Ok(to_json_binary(&info).unwrap()))
+        }
+        _ => panic!("unexpected wasm query {q:?}"),
+    });
 }
 
 // written from the u32 spec, not with str::parse, so the check isn't the code grading itself
@@ -107,7 +124,7 @@ fn op() -> impl Strategy<Value = Op> {
         6 => (actor(), 0u8..3, token_id(), recipient())
             .prop_map(|(caller, sender, token_id, recipient)| Op::Receive { caller, sender, token_id, recipient }),
         2 => (actor(), prop::collection::vec(0u32..7, 0..4)).prop_map(|(caller, ids)| Op::Unlock { caller, ids }),
-        1 => actor().prop_map(|caller| Op::Renounce { caller }),
+        1 => Just(Op::ClearAdmin),
     ]
 }
 
@@ -145,10 +162,7 @@ fn step(m: &mut Model, op: &Op, cw721: &Addr) -> Result<Vec<(String, String)>, C
             m.escrowed = next;
             Ok(out)
         }
-        Op::Renounce { caller } => {
-            if !matches!(caller, Actor::Admin) || m.renounced {
-                return Err(ContractError::Unauthorized);
-            }
+        Op::ClearAdmin => {
             m.renounced = true;
             Ok(vec![])
         }
@@ -163,13 +177,14 @@ fn to_msg(op: &Op) -> ExecuteMsg {
             msg: Binary::from(recipient.as_slice()),
         }),
         Op::Unlock { ids, .. } => ExecuteMsg::EmergencyUnlock { token_ids: ids.clone() },
-        Op::Renounce { .. } => ExecuteMsg::RenounceAdmin {},
+        Op::ClearAdmin => unreachable!("not a contract message"),
     }
 }
 
 fn caller(op: &Op) -> Actor {
     match op {
-        Op::Receive { caller, .. } | Op::Unlock { caller, .. } | Op::Renounce { caller } => *caller,
+        Op::Receive { caller, .. } | Op::Unlock { caller, .. } => *caller,
+        Op::ClearAdmin => unreachable!("not a contract message"),
     }
 }
 
@@ -189,9 +204,6 @@ fn exec(env: &mut Env, who: &Addr, msg: ExecuteMsg) -> Result<cosmwasm_std::Resp
 fn assert_storage(env: &Env, m: &Model) {
     let mut want: BTreeMap<Vec<u8>, Vec<u8>> = BTreeMap::new();
     want.insert(b"cw721".to_vec(), serde_json_addr(&env.cw721));
-    if !m.renounced {
-        want.insert(b"admin".to_vec(), serde_json_addr(&env.admin));
-    }
     for (id, (recipient, sender)) in &m.escrowed {
         want.insert(record_key(*id), recipient.clone());
         want.insert(sender_key(*id), sender.as_bytes().to_vec());
@@ -236,12 +248,16 @@ proptest! {
         let mut m = Model::default();
         for op in &ops {
             let want = step(&mut m, op, &env.cw721);
-            let who = env.addr(caller(op)).clone();
-            let got = exec(&mut env, &who, to_msg(op));
-            match (got, want) {
-                (Ok(res), Ok(want_msgs)) => prop_assert_eq!(transfers(&res, &env.cw721), want_msgs),
-                (Err(g), Err(w)) => prop_assert_eq!(g, w),
-                (g, w) => prop_assert!(false, "op {:?}: contract {:?}, model {:?}", op, g.map(|_| ()), w.map(|_| ())),
+            if let Op::ClearAdmin = op {
+                set_wasm_admin(&mut env.deps, None);
+            } else {
+                let who = env.addr(caller(op)).clone();
+                let got = exec(&mut env, &who, to_msg(op));
+                match (got, want) {
+                    (Ok(res), Ok(want_msgs)) => prop_assert_eq!(transfers(&res, &env.cw721), want_msgs),
+                    (Err(g), Err(w)) => prop_assert_eq!(g, w),
+                    (g, w) => prop_assert!(false, "op {:?}: contract {:?}, model {:?}", op, g.map(|_| ()), w.map(|_| ())),
+                }
             }
             // the model only moves on success, so this also checks a failed message left no trace
             assert_storage(&env, &m);
@@ -265,7 +281,7 @@ proptest! {
         assert_storage(&env, &Model::default());
     }
 
-    /// Only the admin can unlock or renounce, even with ids that are really escrowed.
+    /// Only the admin can unlock, even with ids that are really escrowed.
     #[test]
     fn only_admin_unlocks(name in "[a-z]{1,10}", ids in prop::collection::vec(0u32..3, 0..4)) {
         let mut env = Env::new();
@@ -277,10 +293,9 @@ proptest! {
             step(&mut m, &op, &env.cw721).unwrap();
             execute(env.deps.as_mut(), mock_env(), message_info(&env.cw721.clone(), &[]), to_msg(&op)).unwrap();
         }
-        for msg in [ExecuteMsg::EmergencyUnlock { token_ids: ids.clone() }, ExecuteMsg::RenounceAdmin {}] {
-            let err = execute(env.deps.as_mut(), mock_env(), message_info(&who, &[]), msg).unwrap_err();
-            prop_assert_eq!(err, ContractError::Unauthorized);
-        }
+        let msg = ExecuteMsg::EmergencyUnlock { token_ids: ids.clone() };
+        let err = execute(env.deps.as_mut(), mock_env(), message_info(&who, &[]), msg).unwrap_err();
+        prop_assert_eq!(err, ContractError::Unauthorized);
         assert_storage(&env, &m);
     }
 
