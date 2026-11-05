@@ -33,8 +33,6 @@ export function AboutView() {
   const source = deployment.sourceUrl.replace(/^https:\/\//, '')
   const lag = health.data && !health.data.stale ? aboutMinutes(health.data.lagMinutes) : null
   const facts = trust.data
-  const collectionAdmin = facts?.collection?.admin ?? null
-  const escrowAdmin = facts?.escrow?.admin ?? null
   const emergencyAdmin = facts?.emergencyAdmin
   const cost = claimCost.data
   return (
@@ -108,13 +106,6 @@ export function AboutView() {
             <p>
               It stays locked in the escrow, permanently.
               {emergencyAdmin ? ' This escrow still has an emergency-unlock admin who can return deposited kids.' : ''}
-              {collectionAdmin
-                ? ` One catch: the ${deployment.collectionName} contract has an admin who could upgrade it and move kids out of the escrow (see above).${
-                    escrowAdmin ? ' The escrow itself also has an admin who could upgrade it.' : ''
-                  }`
-                : escrowAdmin
-                  ? ' One catch: this escrow has an admin who could upgrade it (see above).'
-                  : ''}
               {/* COPY: FAQ the kid on the Hub */}
             </p>
           </details>
@@ -240,13 +231,10 @@ function Fact({ tone = 'ok', children }: { tone?: 'ok' | 'caveat' | 'unknown'; c
 function TrustList({ facts, failed }: { facts: TrustFacts | undefined; failed: boolean }) {
   const { deployment } = useBridge()
   const { hub, eth, collectionName } = deployment
-  const test = deployment.id !== 'badkids'
   const unknown = (what: string) =>
     failed || facts ? `Couldn't check who can change ${what} just now.` : `Checking who can change ${what}…`
   const escrow = facts?.escrow
   const collection = facts?.collection
-  // one line instead of two near-identical caveats when the same key holds both
-  const sharedAdmin = escrow?.admin && collection?.admin === escrow.admin ? escrow.admin : null
   return (
     <>
       <ul className="trust">
@@ -257,20 +245,7 @@ function TrustList({ facts, failed }: { facts: TrustFacts | undefined; failed: b
         {hub.escrow &&
           (escrow === undefined ? (
             <Fact tone="unknown">{unknown('the escrow')}</Fact>
-          ) : sharedAdmin ? (
-            <Fact tone="caveat">
-              <b>The {collectionName} contract and {test ? 'this test escrow' : 'the escrow'} share an admin</b> (
-              <Admin address={sharedAdmin} />) who can upgrade either one. An upgrade could move kids out of the escrow or
-              change where kids that haven't crossed yet end up. The bridge can't stop that.
-              {/* COPY: trust, shared admin */}
-            </Fact>
-          ) : escrow?.admin ? (
-            <Fact tone="caveat">
-              <b>{test ? 'This test escrow has an admin' : 'The escrow has an admin'}</b> (<Admin address={escrow.admin} />) who
-              can upgrade it. An upgrade could change where kids that haven't crossed yet end up.
-              {/* COPY: trust, escrow admin */}
-            </Fact>
-          ) : (
+          ) : escrow?.admin ? null : (
             <Fact>
               <b>The escrow has no upgrade admin.</b> Nobody can migrate its code.
               {/* COPY: trust, no escrow admin */}
@@ -305,15 +280,9 @@ function TrustList({ facts, failed }: { facts: TrustFacts | undefined; failed: b
             </Fact>
           </>
         )}
-        {sharedAdmin ? null : collection === undefined ? (
+        {collection === undefined ? (
           <Fact tone="unknown">{unknown(`the ${collectionName} contract`)}</Fact>
-        ) : collection.admin ? (
-          <Fact tone="caveat">
-            <b>The {collectionName} contract has an admin</b> (<Admin address={collection.admin} />) who can upgrade it, and an
-            upgrade could move kids out of the escrow. The bridge can't stop that.
-            {/* COPY: trust, collection admin */}
-          </Fact>
-        ) : (
+        ) : collection.admin ? null : (
           <Fact>
             <b>The {collectionName} contract has no admin.</b> Nobody can upgrade it to move kids out of the escrow.
             {/* COPY: trust, no collection admin */}
