@@ -48,7 +48,7 @@ Quint specs live in `spec/`. Each one has a prod module that should hold, plus a
 |-|-|-|-|
 |`escrow.qnt`|escrow entry points|`escrowProd`|`escrowNoGuards`|
 |`bridge.qnt`|BadBridge.sol entry points|`bridgeProd`|`bridgeNoGuards`, `bridgeUnpinned`|
-|`badbridge.qnt`|both chains together|`prod`|`today`, `noCanonicalCheck`, `adminLive`|
+|`badbridge.qnt`|both chains together|`prod`|`today`, `noCanonicalCheck`, `adminLive`, `escrowAdminLive`, `noSendGuard`|
 
 ```bash
 cd spec
@@ -59,6 +59,8 @@ quint verify escrow.qnt --main=escrowProd --invariant=safety --max-steps=6   # a
 ```
 
 `adminLive` in `badbridge.qnt` has two scripted exploits, run them with `quint test badbridge.qnt --main=adminLive --match=AfterHonestUnlock`.
+
+`noSendGuard` shows why the UI checks the pinned client before every send (`--match='sendIntoDeadClient|strandedInFlight'`). The second run is the gap it can't close: a kid in flight when the client dies is stuck, even in prod.
 
 ## Deployments
 
