@@ -2,8 +2,6 @@ import { fromHex, toBase64, toUtf8 } from '@cosmjs/encoding'
 import {
   QueryContractInfoRequest,
   QueryContractInfoResponse,
-  QueryRawContractStateRequest,
-  QueryRawContractStateResponse,
   QuerySmartContractStateRequest,
   QuerySmartContractStateResponse,
 } from 'cosmjs-types/cosmwasm/wasm/v1/query'
@@ -38,31 +36,34 @@ import { createHubReader } from './reader'
 const fast = { retries: 0, sleep: () => Promise.resolve() }
 
 describe('emergency-unlock admin', () => {
-  it.each([null, '', toBase64(toUtf8(JSON.stringify(REECE)))])('reads raw admin independently of contract_info (%s)', async (data) => {
+  const info = (admin: string) => ({ address: ESCROW, contract_info: { code_id: '822', creator: REECE, admin, label: 'escrow' } })
+
+  it.each([[REECE, REECE], ['', null]])('is the escrow CosmWasm admin (%s)', async (admin, want) => {
     const { hub } = reader(({ url }) => {
-      expect(url.pathname).toContain(`/contract/${ESCROW}/raw/YWRtaW4=`)
-      return json({ data })
+      expect(url.pathname).toBe(`/cosmwasm/wasm/v1/contract/${ESCROW}`)
+      return json(info(admin))
     })
-    expect(await hub.escrowAdmin()).toBe(data ? REECE : null)
+    expect(await hub.escrowAdmin()).toBe(want)
   })
 
-  it('falls back to the protobuf raw query when REST is unavailable', async () => {
+  it('falls back to the protobuf contract info query when REST is unavailable', async () => {
     const { hub } = reader(({ url, body }) => {
       if (url.origin === REST) return new Response('down', { status: 503 })
       const params = (body as { params: { path: string; data: string } }).params
-      expect(params.path).toBe('/cosmwasm.wasm.v1.Query/RawContractState')
-      const req = QueryRawContractStateRequest.decode(fromHex(params.data))
-      expect(req.address).toBe(ESCROW)
-      expect(new TextDecoder().decode(req.queryData)).toBe('admin')
-      const value = toBase64(QueryRawContractStateResponse.encode({ data: toUtf8(JSON.stringify(REECE)) }).finish())
-      return rpcResult({ response: { code: 0, value } })
+      expect(params.path).toBe('/cosmwasm.wasm.v1.Query/ContractInfo')
+      expect(QueryContractInfoRequest.decode(fromHex(params.data)).address).toBe(ESCROW)
+      const value = QueryContractInfoResponse.encode({
+        address: ESCROW,
+        contractInfo: { codeId: 822n, creator: REECE, admin: REECE, label: 'escrow', ibcPortId: '', ibc2PortId: '' },
+      }).finish()
+      return rpcResult({ response: { code: 0, value: toBase64(value) } })
     })
     expect(await hub.escrowAdmin()).toBe(REECE)
   })
 
-  it('does not mistake malformed stored data for renunciation', async () => {
-    const { hub } = reader(() => json({ data: toBase64(toUtf8('null')) }))
-    await expect(hub.escrowAdmin()).rejects.toMatchObject({ code: 'Unknown' })
+  it('does not mistake a malformed answer for a cleared admin', async () => {
+    const { hub } = reader(() => json({ contract_info: { code_id: '822' } }), { rpc: [] })
+    await expect(hub.escrowAdmin()).rejects.toMatchObject({ code: 'Network' })
   })
 })
 

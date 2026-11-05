@@ -4,8 +4,6 @@ import { fromBase64, fromBech32, fromHex, fromUtf8, toBase64, toHex, toUtf8 } fr
 import {
   QueryContractInfoRequest,
   QueryContractInfoResponse,
-  QueryRawContractStateRequest,
-  QueryRawContractStateResponse,
   QuerySmartContractStateRequest,
   QuerySmartContractStateResponse,
 } from 'cosmjs-types/cosmwasm/wasm/v1/query'
@@ -386,29 +384,11 @@ export function createHubReader(deployment: Deployment, options: TransportOption
         return seen.code === 0 ? 'confirmed' : 'failed'
       }),
 
+    // the escrow checks wasmd's contract admin for EmergencyUnlock, so the CosmWasm admin is the unlock admin
     escrowAdmin: () =>
       guard(async () => {
-        const address = escrow()
-        const key = toUtf8('admin')
-        const bytes = await t.run('escrow emergency admin', {
-          async rest(base, http) {
-            const body = await http.get(`${base}/cosmwasm/wasm/v1/contract/${address}/raw/${base64Url(key)}`)
-            if (!isRecord(body) || !('data' in body) || (body.data !== null && typeof body.data !== 'string')) {
-              throw new EndpointError('escrow admin: invalid raw response')
-            }
-            return body.data === null ? new Uint8Array() : fromBase64(body.data)
-          },
-          async rpc(base, http) {
-            const data = toHex(QueryRawContractStateRequest.encode({ address, queryData: key }).finish())
-            return QueryRawContractStateResponse.decode(await abciQuery(http, base, '/cosmwasm.wasm.v1.Query/RawContractState', data)).data
-          },
-        })
-        if (bytes.length === 0) return null
-        const admin: unknown = JSON.parse(fromUtf8(bytes))
-        if (typeof admin !== 'string' || !isHubAddress(admin, hub.bech32Prefix)) {
-          throw new BridgeError('Unknown', 'escrow emergency admin is not a valid address')
-        }
-        return admin
+        const info = await t.run('escrow emergency admin', contractInfoCall(escrow()))
+        return info.admin
       }),
   }
 }
