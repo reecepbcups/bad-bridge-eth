@@ -19,7 +19,7 @@ import type { EthWriterWithBatch } from './eth/writer'
 import { escrowRaw, proofHeader, proveAt, storeKey } from './hub/prove'
 import { encodeSp1Stdin, stdinChunks, type StdinRecord } from './hub/stdin'
 import { createTransport } from './hub/transport'
-import { getProveBalance, MAX_PROOF_COST, waitForProof, type ProofQuote, type ProofRequestProgress, type SuccinctStage } from './succinct/client'
+import { getProveBalance, waitForProof, type ProofQuote, type ProofRequestProgress, type SuccinctStage } from './succinct/client'
 import { BridgeError, type BatchOptions, type ConsensusStateArgs, type EthAddress, type KidId } from './types'
 
 export type ProveStage = 'finding-proof' | SuccinctStage | 'signing' | 'confirming'
@@ -130,9 +130,10 @@ export interface ProveKidWriter {
 
 /**
  * PROVE the Succinct account must hold before sending. One proof measured 0.334 PROVE on mainnet 2026-09-28 for
- * 1 kid and for 10 kids alike, so it's per proof, not per kid. A quote hit 0.424 on 2026-11-05, so the cap is 1.
+ * 1 kid and for 10 kids alike, so it's per proof, not per kid. A quote hit 0.424 on 2026-11-05, which a 0.33 account may not cover.
+ * Below MAX_PROOF_COST on purpose: the cap is how high a quote may go, not what the account has to hold.
  */
-export const PROVE_NEEDED = MAX_PROOF_COST
+export const PROVE_NEEDED = 33n * 10n ** 16n
 
 export { MIN_DEPOSIT }
 
@@ -182,10 +183,10 @@ export function createProveKidWriter(deployment: Deployment, ethWriter: EthWrite
     const stdinBytes = encodeSp1Stdin(stdinChunks(header.appHash, records))
     const decoded = await ethWriter.requestGroth16Proof(MEMBERSHIP_NETWORK_VK_HASH, stdinBytes, {
       onStage, onProgress: options?.onProgress, confirmQuote: options?.confirmQuote,
-      onRequestSubmitting: options?.onRequestSubmitting,
+      onRequestSubmitting: options?.onRequestSubmitting, kids: records.map((r) => r.id),
     })
     const sp1Proof = { vKey: vkHash, publicValues: decoded.publicValues, proof: decoded.proofBytes }
-    const { txHash } = await ethWriter.submitBatch(height, cs, sp1Proof, { onStage })
+    const { txHash } = await ethWriter.submitBatch(height, cs, sp1Proof, { onStage, kids: records.map((r) => r.id) })
     return { txHash, proved: records.map((r) => r.id) }
   }
 

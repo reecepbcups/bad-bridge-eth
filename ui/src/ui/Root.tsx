@@ -6,6 +6,7 @@ import { useFocusHeadingOnChange } from './hooks'
 import { ToastProvider } from './Toasts'
 import { useTitle } from './useTitle'
 import { AboutView } from './views/AboutView'
+import { ActivityView } from './views/ActivityView'
 import { BridgeView } from './views/bridge/BridgeView'
 import { FlowProvider } from './views/bridge/flow'
 import { KidsView } from './views/KidsView'
@@ -42,6 +43,8 @@ function RouteView({ route }: { route: Route }) {
       return <KidView key={route.id} id={route.id} />
     case 'about':
       return <AboutView />
+    case 'activity':
+      return <ActivityView />
     case 'not-found':
       return <NotFoundView path={route.path} />
   }

@@ -14,6 +14,7 @@ const TABS = [
   { name: 'crossing', hash: '#/crossing', tab: 'Crossing', heading: 'Crossing', ready: '#9254' },
   { name: 'kids', hash: '#/kids', tab: 'My Eth kids', heading: 'My Eth kids', ready: '#8073' },
   { name: 'about', hash: '#/about', tab: 'About', heading: "What's the Bad Bridge?", ready: 'Contracts' },
+  { name: 'activity', hash: '#/activity', tab: 'Activity', heading: 'Activity', ready: 'Nothing signed yet' },
 ] as const
 
 // paused: stable heights for screenshots; instant: no artificial latency

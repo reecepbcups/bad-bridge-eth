@@ -2,7 +2,7 @@ import { useMemo, useSyncExternalStore } from 'react'
 import type { KidId } from './chain/types'
 
 // Hash routing, so dist/ works on any static host or IPFS gateway without rewrites.
-// #/  #/crossing  #/crossing/<0x…|cosmos1…>  #/kids  #/kids/<0x…|cosmos1…>  #/kid/<id>  #/about
+// #/  #/crossing  #/crossing/<0x…|cosmos1…>  #/kids  #/kids/<0x…|cosmos1…>  #/kid/<id>  #/about  #/activity
 
 export type Route =
   | { name: 'bridge' }
@@ -12,6 +12,8 @@ export type Route =
   | { name: 'kids'; address?: string }
   | { name: 'kid'; id: KidId }
   | { name: 'about' }
+  /** what this browser signed */
+  | { name: 'activity' }
   | { name: 'not-found'; path: string }
 
 export type RouteName = Route['name']
@@ -36,6 +38,7 @@ export function parseHash(hash: string): Route {
   if (rest.length === 0) {
     if (head === undefined) return { name: 'bridge' }
     if (head === 'about' && arg === undefined) return { name: 'about' }
+    if (head === 'activity' && arg === undefined) return { name: 'activity' }
     if (head === 'crossing') return arg === undefined ? { name: 'crossing' } : { name: 'crossing', address: arg.trim() }
     if (head === 'kids') return arg === undefined ? { name: 'kids' } : { name: 'kids', address: arg.trim() }
     if (head === 'kid' && arg !== undefined) {
@@ -58,6 +61,8 @@ export function href(route: Route): string {
       return `#/kid/${route.id}`
     case 'about':
       return '#/about'
+    case 'activity':
+      return '#/activity'
     case 'not-found':
       return `#${route.path}`
   }

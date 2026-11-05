@@ -128,6 +128,9 @@ export interface ClaimResult {
   claimed: KidId[]
 }
 
+/** A tx as the chain sees it: not in a block yet (or not found), in a block and succeeded, or in a block and failed. */
+export type TxStatus = 'pending' | 'confirmed' | 'failed'
+
 /** Read-only Hub queries (REST with RPC fallback in the real adapter). */
 export interface HubReader {
   /** Kids `owner` holds in the cw721, every page, ascending. */
@@ -150,6 +153,8 @@ export interface HubReader {
   contractInfo(address: HubAddress): Promise<ContractInfo>
   /** Internal emergency-unlock authority, separate from the CosmWasm migration admin. */
   escrowAdmin(): Promise<HubAddress | null>
+  /** A tx by uppercase hex hash, for the activity log. Optional: the demo has no real txs. */
+  txStatus?(hash: string): Promise<TxStatus>
 }
 
 /** Read-only Ethereum queries (viem, batched through Multicall3 in the real adapter). */
@@ -179,6 +184,8 @@ export interface EthReader {
    * config because the router can repoint it on a client migration.
    */
   hubClientId(): Promise<string>
+  /** A tx's receipt status by hash, for the activity log. Optional: the demo has no real txs. */
+  txStatus?(hash: Hex): Promise<TxStatus>
 }
 
 /**
@@ -213,6 +220,8 @@ export type BatchStage = 'signing' | 'confirming'
 export interface BatchOptions {
   /** Called as the call reaches each stage. Never called after the promise settles; a callback that throws is ignored. */
   onStage?: (stage: BatchStage) => void
+  /** Kids this call is for, so the activity log can name them. */
+  kids?: readonly KidId[]
 }
 
 /** BadBridge.sol's ConsensusState struct — an input to submitBatch. */

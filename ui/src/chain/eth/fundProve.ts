@@ -1,5 +1,6 @@
 import { encodeFunctionData, parseAbi, parseSignature, type Address, type Hex } from 'viem'
 import { getChainId, readContract, signTypedData, simulateContract, waitForTransactionReceipt, writeContract } from 'viem/actions'
+import type { ActivityEntry } from '../../activity/storage'
 import { BridgeError, type BatchStage } from '../types'
 import type { ReadClient, SignerClient } from './writer'
 
@@ -35,6 +36,8 @@ const routerAbi = parseAbi([
 const vappAbi = parseAbi(['function permitAndDeposit(address from, uint256 amount, uint256 deadline, uint8 v, bytes32 r, bytes32 s) returns (uint64)'])
 
 type Report = (stage: BatchStage) => void
+/** Hears each hash or signature the wallet hands back, for the activity log. */
+type Log = (entry: ActivityEntry) => void
 
 /** How much ETH buying `prove` PROVE costs right now. Nothing is sent. */
 export async function quoteProve(client: ReadClient, prove: bigint): Promise<bigint> {
@@ -71,7 +74,7 @@ async function confirm(client: ReadClient, hash: Hex, what: string, report: Repo
 }
 
 /** Buys exactly `prove` PROVE with ETH into the wallet. Sends the quote plus slippage; the router refunds the rest. */
-export async function swapEthForProve(client: ReadClient, wallet: SignerClient, chainId: number, prove: bigint, report: Report): Promise<Hex> {
+export async function swapEthForProve(client: ReadClient, wallet: SignerClient, chainId: number, prove: bigint, report: Report, log: Log = () => {}): Promise<Hex> {
   await assertMainnet(wallet, chainId)
   const quote = await quoteProve(client, prove)
   const maxIn = quote + (quote * SLIPPAGE_PERCENT) / 100n
@@ -92,11 +95,12 @@ export async function swapEthForProve(client: ReadClient, wallet: SignerClient, 
   })
   report('signing')
   const hash = await writeContract(wallet, { ...request, account: wallet.account, chain: wallet.chain })
+  log({ action: 'buy-prove', hash })
   return confirm(client, hash, 'swap', report)
 }
 
 /** Deposits `amount` PROVE into the wallet's own Succinct network account: one permit signature, one tx. */
-export async function depositProve(client: ReadClient, wallet: SignerClient, chainId: number, amount: bigint, report: Report): Promise<Hex> {
+export async function depositProve(client: ReadClient, wallet: SignerClient, chainId: number, amount: bigint, report: Report, log: Log = () => {}): Promise<Hex> {
   if (amount < MIN_DEPOSIT) throw new BridgeError('Unknown', 'Succinct takes deposits of 0.01 PROVE or more')
   await assertMainnet(wallet, chainId)
   const owner = wallet.account.address
@@ -118,6 +122,7 @@ export async function depositProve(client: ReadClient, wallet: SignerClient, cha
     primaryType: 'Permit',
     message: { owner, spender: VAPP, value: amount, nonce, deadline },
   })
+  log({ action: 'sign-prove-permit' })
   const { r, s, yParity, v } = parseSignature(signature)
   const { request } = await simulateContract(client, {
     account: wallet.account,
@@ -127,5 +132,6 @@ export async function depositProve(client: ReadClient, wallet: SignerClient, cha
     args: [owner, amount, deadline, Number(v ?? BigInt(27 + (yParity ?? 0))), r, s],
   })
   const hash = await writeContract(wallet, { ...request, account: wallet.account, chain: wallet.chain })
+  log({ action: 'deposit-prove', hash })
   return confirm(client, hash, 'deposit', report)
 }

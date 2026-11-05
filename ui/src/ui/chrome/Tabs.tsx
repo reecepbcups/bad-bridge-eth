@@ -3,10 +3,10 @@ import type { RouteName } from '../../router'
 import { useTrips } from '../../trips/hooks'
 import './Tabs.css'
 
-export type Tab = 'bridge' | 'crossing' | 'kids' | 'about'
+export type Tab = 'bridge' | 'crossing' | 'kids' | 'about' | 'activity'
 
 export function tabOf(route: RouteName): Tab | null {
-  if (route === 'bridge' || route === 'crossing' || route === 'about') return route
+  if (route === 'bridge' || route === 'crossing' || route === 'about' || route === 'activity') return route
   if (route === 'kids' || route === 'kid') return 'kids'
   return null
 }
@@ -16,6 +16,7 @@ const TABS: readonly { tab: Tab; href: string; label: string }[] = [
   { tab: 'crossing', href: '#/crossing', label: 'Crossing' },
   { tab: 'kids', href: '#/kids', label: 'My Eth kids' },
   { tab: 'about', href: '#/about', label: 'About' },
+  { tab: 'activity', href: '#/activity', label: 'Activity' },
 ]
 
 /** Top-level sections. Links, not ARIA tabs: each one is its own route. */

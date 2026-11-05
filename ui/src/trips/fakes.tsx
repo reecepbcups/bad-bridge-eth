@@ -21,6 +21,7 @@ import {
   type KidId,
   type SendInfo,
   type SendOptions,
+  type TxStatus,
   type WalletState,
 } from '../chain/types'
 import { DEPLOYMENTS, type Deployment } from '../config/deployments'
@@ -71,6 +72,8 @@ export interface FakeChain {
   clientRetired: boolean
   /** wei, for estimateClaim() */
   gasPrice: bigint
+  /** txStatus(): hash → status. Missing hashes read as pending. */
+  txs: Map<string, TxStatus>
   /** make a read fail: method name → error */
   fail: Partial<Record<keyof HubReader | keyof EthReader, BridgeError>>
 }
@@ -95,6 +98,7 @@ export function fakeChain(init: Partial<FakeChain> = {}): FakeChain {
     clientExpired: false,
     clientRetired: false,
     gasPrice: 1_000_000_000n,
+    txs: new Map(),
     fail: {},
     ...init,
   }
@@ -154,6 +158,7 @@ export function fakeReaders(chain: FakeChain) {
         return { ...info }
       }),
     ),
+    txStatus: vi.fn((hash: string) => guard('txStatus', () => chain.txs.get(hash) ?? 'pending')),
   } satisfies HubReader
   const eth = {
     clientSafety: vi.fn(() => guard('clientSafety', () => ({ frozen: chain.client.frozen, expired: chain.clientExpired, retired: chain.clientRetired }))),
@@ -174,6 +179,7 @@ export function fakeReaders(chain: FakeChain) {
       }),
     ),
     hubClientId: vi.fn(() => guard('hubClientId', () => chain.hubClientId)),
+    txStatus: vi.fn((hash: Hex) => guard('txStatus', () => chain.txs.get(hash) ?? 'pending')),
   } satisfies EthReader
   return { hub, eth }
 }

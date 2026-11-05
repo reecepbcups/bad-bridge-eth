@@ -16,7 +16,7 @@ describe('AboutView trust facts', () => {
   it('names the admins of a test escrow and collection, and never claims "no admin keys"', async () => {
     const chain = fakeChain()
     chain.contracts.set(LIVE.hub.escrow ?? '', { codeId: 750, admin: REECE })
-    chain.contracts.set(LIVE.hub.cw721, { codeId: 431, admin: REECE })
+    chain.contracts.set(LIVE.hub.cw721, { codeId: 431, admin: BADKIDS_ADMIN })
     chain.proxies.set(LIVE.eth.router.toLowerCase(), '0x17fa3A98D0239a399927C7c3CCdE142e08Deb7B5')
     const { wrapper } = fakeBridge(chain)
     render(<AboutView />, { wrapper })
@@ -30,6 +30,18 @@ describe('AboutView trust facts', () => {
     expect(screen.queryByText(/Nobody can pause/i)).not.toBeInTheDocument()
     expect(screen.getByText(/One catch: the ReeceBadTestTwo contract has an admin/)).toBeInTheDocument()
     expect(document.title).toBe('About · Bad Bridge')
+  })
+
+  it('merges the caveat when the collection and escrow share an admin', async () => {
+    const chain = fakeChain()
+    chain.contracts.set(LIVE.hub.escrow ?? '', { codeId: 750, admin: REECE })
+    chain.contracts.set(LIVE.hub.cw721, { codeId: 431, admin: REECE })
+    const { wrapper } = fakeBridge(chain)
+    render(<AboutView />, { wrapper })
+
+    expect(await screen.findByText('The ReeceBadTestTwo contract and this test escrow share an admin')).toBeInTheDocument()
+    expect(screen.queryByText('This test escrow has an admin')).not.toBeInTheDocument()
+    expect(screen.queryByText('The ReeceBadTestTwo contract has an admin')).not.toBeInTheDocument()
   })
 
   it('says "no admin" only when the admin is empty', async () => {

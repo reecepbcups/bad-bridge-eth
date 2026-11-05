@@ -246,6 +246,8 @@ function TrustList({ facts, failed }: { facts: TrustFacts | undefined; failed: b
     failed || facts ? `Couldn't check who can change ${what} just now.` : `Checking who can change ${what}…`
   const escrow = facts?.escrow
   const collection = facts?.collection
+  // one line instead of two near-identical caveats when the same key holds both
+  const sharedAdmin = escrow?.admin && collection?.admin === escrow.admin ? escrow.admin : null
   return (
     <>
       <ul className="trust">
@@ -256,6 +258,13 @@ function TrustList({ facts, failed }: { facts: TrustFacts | undefined; failed: b
         {hub.escrow &&
           (escrow === undefined ? (
             <Fact tone="unknown">{unknown('the escrow')}</Fact>
+          ) : sharedAdmin ? (
+            <Fact tone="caveat">
+              <b>The {collectionName} contract and {test ? 'this test escrow' : 'the escrow'} share an admin</b> (
+              <Admin address={sharedAdmin} />) who can upgrade either one. An upgrade could move kids out of the escrow or
+              change where kids that haven't crossed yet end up. The bridge can't stop that.
+              {/* COPY: trust, shared admin */}
+            </Fact>
           ) : escrow?.admin ? (
             <Fact tone="caveat">
               <b>{test ? 'This test escrow has an admin' : 'The escrow has an admin'}</b> (<Admin address={escrow.admin} />) who
@@ -297,7 +306,7 @@ function TrustList({ facts, failed }: { facts: TrustFacts | undefined; failed: b
             </Fact>
           </>
         )}
-        {collection === undefined ? (
+        {sharedAdmin ? null : collection === undefined ? (
           <Fact tone="unknown">{unknown(`the ${collectionName} contract`)}</Fact>
         ) : collection.admin ? (
           <Fact tone="caveat">

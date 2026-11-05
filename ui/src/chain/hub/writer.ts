@@ -1,7 +1,7 @@
 // The HubWriter core: one tx, one MsgExecuteContract per kid, simulate before anything touches the wallet.
 // Plain factory (no React, no graz) so tests and the live suite can drive it without a wallet.
 
-import { fromBase64, fromHex, toBase64, toHex } from '@cosmjs/encoding'
+import { fromBase64, toBase64, toHex } from '@cosmjs/encoding'
 import { SigningCosmWasmClient } from '@cosmjs/cosmwasm'
 import type { OfflineSigner } from '@cosmjs/proto-signing'
 import { accountFromAny } from '@cosmjs/stargate'
@@ -13,6 +13,7 @@ import { AuthInfo, Fee, Tx, TxBody, TxRaw } from 'cosmjs-types/cosmos/tx/v1beta1
 import { MsgExecuteContract } from 'cosmjs-types/cosmwasm/wasm/v1/tx'
 import { MsgTransfer } from 'cosmjs-types/ibc/applications/transfer/v1/tx'
 import { sha256 } from 'viem'
+import { recordActivity } from '../../activity/storage'
 import type { Deployment } from '../../config/deployments'
 import {
   BridgeError,
@@ -28,9 +29,8 @@ import {
 import { checkRecipient } from '../eth/recipient'
 import { buildNudgeMsg, buildSendMsgs, MSG_TRANSFER, NUDGE_MEMO, type ExecuteEncodeObject, type TransferEncodeObject } from './encode'
 import { chainLogToBridgeError, toHubError, walletErrorToBridgeError } from './errors'
-import { toHeight } from './events'
-import { abciQuery } from './reader'
-import { ChainError, createTransport, EndpointError, type Http, type Transport, type TransportOptions } from './transport'
+import { abciQuery, lookupTx } from './reader'
+import { createTransport, EndpointError, type Transport, type TransportOptions } from './transport'
 
 /** Gas limit = simulated gas × 1.4. */
 export const GAS_MULTIPLIER_TENTHS = 14n
@@ -284,45 +284,6 @@ async function broadcastSync(t: Transport, txBytes: Uint8Array): Promise<Broadca
   })
 }
 
-type Lookup = { found: false } | { found: true; height: number; code: number; log: string }
-
-const NOT_FOUND = /not found/i
-
-/**
- * One look for a tx by hash: REST, then each RPC node. A "not found" from one endpoint doesn't mean not found
- * everywhere (indexer lag, pruning), so it keeps trying the rest instead of giving up early; `deadline` (Date.now()
- * ms) stops it from trying further endpoints once the caller's budget is spent, since each endpoint has its own
- * timeout and REST+RPC together can otherwise run well past it. Not found anywhere reachable → { found: false }.
- */
-async function lookupTx(http: Http, rest: readonly string[], rpc: readonly string[], hash: string, deadline: number): Promise<Lookup> {
-  for (const base of rest) {
-    if (Date.now() > deadline) return { found: false }
-    try {
-      const body = await http.get(`${base}/cosmos/tx/v1beta1/txs/${hash}`)
-      const r = isRecord(body) && isRecord(body.tx_response) ? body.tx_response : null
-      const height = toHeight(r?.height)
-      if (!r || height === null) continue
-      return { found: true, height, code: typeof r.code === 'number' ? r.code : 0, log: typeof r.raw_log === 'string' ? r.raw_log : '' }
-    } catch (e) {
-      // not found here doesn't mean not found on another endpoint; keep going (same for a genuine EndpointError)
-      if (!(e instanceof ChainError && (e.code === 5 || NOT_FOUND.test(e.message)))) continue
-    }
-  }
-  for (const base of rpc) {
-    if (Date.now() > deadline) return { found: false }
-    try {
-      const r = await http.rpc(base, 'tx', { hash: toBase64(fromHex(hash)), prove: false })
-      const height = isRecord(r) ? toHeight(r.height) : null
-      const result = isRecord(r) && isRecord(r.tx_result) ? r.tx_result : null
-      if (height === null || !result) continue
-      return { found: true, height, code: typeof result.code === 'number' ? result.code : 0, log: typeof result.log === 'string' ? result.log : '' }
-    } catch (e) {
-      if (!(e instanceof EndpointError && NOT_FOUND.test(e.message))) continue
-    }
-  }
-  return { found: false }
-}
-
 export function createHubWriter(config: HubWriterConfig): HubWriter {
   const { deployment, address } = config
   const hub = deployment.hub
@@ -430,6 +391,7 @@ export function createHubWriter(config: HubWriterConfig): HubWriter {
 
     report('broadcasting')
     const hash = sha256(txBytes).slice(2).toUpperCase()
+    recordActivity(deployment.id, { action: 'send', hash, kids: [...ids] })
     try {
       const sent = await broadcastSync(t, txBytes)
       if (!sent.accepted) throw chainLogToBridgeError(sent.log, ids)
@@ -478,6 +440,7 @@ export function createHubWriter(config: HubWriterConfig): HubWriter {
 
     report('broadcasting')
     const hash = sha256(txBytes).slice(2).toUpperCase()
+    recordActivity(deployment.id, { action: 'nudge', hash })
     try {
       const sent = await broadcastSync(t, txBytes)
       if (!sent.accepted) throw chainLogToBridgeError(sent.log)
