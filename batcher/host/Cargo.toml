@@ -1,7 +1,0 @@
-[package]
-name = "spike-host"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-sp1-sdk = { version = "=6.1.0", default-features = false, features = ["blocking", "network"] }
