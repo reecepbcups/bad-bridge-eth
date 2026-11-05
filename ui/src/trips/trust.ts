@@ -9,7 +9,7 @@ import { isLive, type Deployment } from '../config/deployments'
 export interface TrustFacts {
   /** The escrow's code id and admin. null when there's no escrow yet. */
   escrow: ContractInfo | null | undefined
-  /** Raw internal admin: null means emergency unlock has been permanently renounced. */
+  /** Escrow CosmWasm admin: null means emergency unlock has been permanently renounced. */
   emergencyAdmin: string | null | undefined
   /** The cw721's code id and admin. The escrow holds kids in it, so its admin matters too. */
   collection: ContractInfo | undefined
