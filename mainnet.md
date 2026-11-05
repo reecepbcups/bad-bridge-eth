@@ -33,7 +33,7 @@ Pinata is the only public gateway that still serves these. ipfs.io, dweb.link an
 Default `CONTRACT_URI` is this json, base64'd into a `data:application/json;base64,` uri:
 
 ```json
-{"name":"Bad Kids","description":"Bad Kids is a collection of 9,999 bad drawings of bad kids","image":"ipfs://QmSFc8TPuVwLUfxEov7s66rfKoJ75NRcBRC4uQjMRcJoZ9/badkids.jpg","external_link":"https://badkids.com/"}
+{"name":"Bad Kids","description":"Bad Kids is a collection of 9,999 bad drawings of bad kids. Escaped from the Cosmos.","image":"ipfs://QmSFc8TPuVwLUfxEov7s66rfKoJ75NRcBRC4uQjMRcJoZ9/badkids.jpg","external_link":"https://badkids.com/"}
 ```
 
 The deploy log prints the base64 form. Check it with `echo <after base64,> | base64 -d`.
