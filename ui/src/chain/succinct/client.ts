@@ -36,10 +36,10 @@ const DEFAULT_GAS_LIMIT = 1_000_000_000n
 const DEFAULT_CYCLE_LIMIT = 1_000_000_000_000n
 /** What a request reserves is base_fee + max_price_per_pgu * this, so 1e9 reserved 0.86 PROVE for a proof that
  * costs about 0.335. A real proof of 8 to 10 kids used 2.76M PGUs (measured 2026-09-28), 10M leaves room for a 50 kid
- * send and still reserves only about 0.338, under the 0.34 PROVE gate. Too low and the request comes back unfulfillable. */
+ * send and still reserves only about 0.338, under the 1 PROVE gate. Too low and the request comes back unfulfillable. */
 const REQUEST_GAS_LIMIT = 10_000_000n
 /** Maximum PROVE this UI may authorize for one proof, in 18-decimal base units. */
-export const MAX_PROOF_COST = 34n * 10n ** 16n
+export const MAX_PROOF_COST = 10n ** 18n
 
 export interface ProofQuote {
   /** The maximum charge authorized by the exact request being signed. */

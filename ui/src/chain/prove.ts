@@ -130,7 +130,7 @@ export interface ProveKidWriter {
 
 /**
  * PROVE the Succinct account must hold before sending. One proof measured 0.334 PROVE on mainnet 2026-09-28 for
- * 1 kid and for 10 kids alike, so it's per proof, not per kid. 0.34 covers one proof of up to 50 kids.
+ * 1 kid and for 10 kids alike, so it's per proof, not per kid. A quote hit 0.424 on 2026-11-05, so the cap is 1.
  */
 export const PROVE_NEEDED = MAX_PROOF_COST
 
