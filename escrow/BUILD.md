@@ -22,4 +22,4 @@ cd escrow
 cargo test --locked
 ```
 
-After upload, compare the code's on-chain checksum to `artifacts/checksums.txt`. Instantiate with `--no-admin`, verify the selected collection, and renounce the separate internal EmergencyUnlock admin before opening public deposits; see `../mainnet.md`.
+After upload, compare the code's on-chain checksum to `artifacts/checksums.txt`. Instantiate with the temporary CosmWasm admin `scripts/instantiate-escrow.sh` sets, verify the selected collection, then clear that admin and renounce the separate internal EmergencyUnlock admin before opening public deposits; see `../mainnet.md`.

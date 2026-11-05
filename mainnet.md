@@ -66,11 +66,11 @@ Set all three deployment choices explicitly. The script has no collection, admin
 
 ```bash
 export CW721=cosmos12gsv9tmjhhg86wg9fnd9cnju28jx3fxva9cn8dh9meketkfxxajqmg3exz
-export ADMIN=<temporary-emergency-unlock-cosmos-address>
+export ADMIN=<temporary-admin-cosmos-address>   # both the EmergencyUnlock admin and the CosmWasm admin
 export FROM_KEY=<local-gaiad-key-name>
 ```
 
-The internal `ADMIN` can refund tokens until renounced. `--no-admin` separately prevents CosmWasm code migration. Renounce the internal admin after the operator smoke test and **before enabling public deposits**. Keep the public UI closed throughout deployment and smoke testing.
+The internal `ADMIN` can refund tokens until renounced. The script also makes `ADMIN` the CosmWasm admin, so if the smoke test with a real kid goes wrong we can migrate to fixed code instead of leaving it stuck. Clear the CosmWasm admin and renounce the internal admin after the operator smoke test and **before enabling public deposits**. The UI won't send while either one exists, so the smoke test send goes through `gaiad`. Keep the public UI closed throughout deployment and smoke testing.
 
 ```bash
 gaiad tx wasm store escrow/artifacts/bad_bridge_escrow.wasm \
@@ -80,7 +80,7 @@ gaiad tx wasm store escrow/artifacts/bad_bridge_escrow.wasm \
 scripts/instantiate-escrow.sh <code-id> bad-kids-escrow
 ```
 
-Before instantiation, query the uploaded code's checksum and compare it to `escrow/artifacts/checksums.txt`. After instantiation, confirm the configured collection and absent CosmWasm migration admin on chain.
+Before instantiation, query the uploaded code's checksum and compare it to `escrow/artifacts/checksums.txt`. After instantiation, confirm the configured collection and that the CosmWasm admin is `ADMIN` on chain.
 
 ### 2. Escrow address as bytes32
 
@@ -111,14 +111,26 @@ Build the public site with `VITE_DEPLOYMENT=badkids`, then update the Deployment
 
 ## Smoke test
 
-1. While the public UI remains closed, have the operator send one kid to the escrow with their ETH address as the msg
+1. While the public UI remains closed, have the operator send one kid to the escrow with their ETH address as the msg. The UI blocks sends while the escrow has an admin, so use `gaiad`:
+
+```bash
+gaiad tx wasm execute <cw721 cosmos1...> '{"send_nft":{"contract":"<escrow cosmos1...>","token_id":"<id>","msg":"'$(echo <0x... without 0x> | xxd -r -p | base64)'"}}' \
+  --from <operator-key-name> --chain-id cosmoshub-4 --gas auto --gas-adjustment 1.3 --gas-prices 0.005uatom \
+  --node https://cosmos-rpc.polkachu.com:443 -y
+```
+
 2. If the Eureka client is stale, send a little ATOM over Eureka to nudge it (~10 min)
 3. Open the kid in a local UI build and hit "Prove it yourself"
 4. `claim(id)` and check `ownerOf`, `tokenURI` and `royaltyInfo`
-5. Renounce the escrow admin. While it's alive an `EmergencyUnlock` can put the same kid on both chains, even one with no `Proven` event yet, since any old Eureka root still proves the record. Don't unlock the smoke test kid, just renounce
+5. If the kid didn't land, migrate the escrow to fixed code (`gaiad tx wasm migrate`) and go again. Only move on once a real kid has crossed
+6. Renounce the escrow admin and clear the CosmWasm admin. While it's alive an `EmergencyUnlock` can put the same kid on both chains, even one with no `Proven` event yet, since any old Eureka root still proves the record. Don't unlock the smoke test kid, just renounce
 
 ```bash
 gaiad tx wasm execute <escrow cosmos1...> '{"renounce_admin":{}}' \
+  --from <admin-key-name> --chain-id cosmoshub-4 --gas auto --gas-adjustment 1.3 --gas-prices 0.005uatom \
+  --node https://cosmos-rpc.polkachu.com:443 -y
+
+gaiad tx wasm clear-contract-admin <escrow cosmos1...> \
   --from <admin-key-name> --chain-id cosmoshub-4 --gas auto --gas-adjustment 1.3 --gas-prices 0.005uatom \
   --node https://cosmos-rpc.polkachu.com:443 -y
 ```

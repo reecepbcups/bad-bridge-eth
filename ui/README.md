@@ -24,7 +24,7 @@ Settings (copy `.env.example` to `.env.local`):
 
 | Variable | What |
 |-|-|
-| `VITE_DEPLOYMENT` | Which preset in `src/config/deployments.ts` to build: `reece-test`, `badkids` or `demo`. **Required** for a production build, which fails without it (a missing value used to ship reece-test silently). Dev falls back to `reece-test`. |
+| `VITE_DEPLOYMENT` | Which preset in `src/config/deployments.ts` to build: `reece-test`, `badkids-test`, `badkids` or `demo`. **Required** for a production build, which fails without it (a missing value used to ship reece-test silently). Dev falls back to `reece-test`. |
 | `VITE_ALLOW_DEMO` | `1` makes a production build honour `?demo`. Only for test builds; leave it unset for a real site. |
 | `VITE_WC_PROJECT_ID` | Reown (WalletConnect) project id. Without it only extension wallets and Coinbase Wallet are offered. The project's allowlist has to include the site's origin. |
 | `VITE_ARTIFACT_PROXY_URL` | Where "Prove it yourself" sends Succinct artifact uploads/downloads. `/api` on Vercel (see Hosting). Dev defaults to the local `pnpm artifact-proxy`. A prod build without it can't prove. |

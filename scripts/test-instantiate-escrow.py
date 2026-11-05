@@ -39,7 +39,7 @@ if sys.argv[1:3] == ['debug', 'addr'] and os.environ.get('MOCK_BAD_CHECKSUM'):
         calls = [json.loads(line) for line in self.calls.read_text().splitlines()] if self.calls.exists() else []
         return [call for call in calls if call[0] == "tx"]
 
-    def test_explicit_production_collection_and_non_migratable_escrow(self):
+    def test_explicit_production_collection_and_temporary_wasm_admin(self):
         result = self.run_script("812", "Bad Kids escrow")
         self.assertEqual(result.returncode, 0, result.stderr)
         [args] = self.transactions()
@@ -48,8 +48,8 @@ if sys.argv[1:3] == ['debug', 'addr'] and os.environ.get('MOCK_BAD_CHECKSUM'):
         for flag, value in [("--label", "Bad Kids escrow"), ("--from", "test-only-key"),
                             ("--node", "https://node.example.invalid"), ("--chain-id", "cosmoshub-4")]:
             self.assertEqual(args[args.index(flag) + 1], value)
-        self.assertIn("--no-admin", args)
-        self.assertNotIn("--admin", args)
+        self.assertEqual(args[args.index("--admin") + 1], ADMIN)
+        self.assertNotIn("--no-admin", args)
 
     def test_missing_configuration_never_sends(self):
         for name in ["CW721", "ADMIN", "FROM_KEY"]:

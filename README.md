@@ -90,8 +90,8 @@ Eureka light client: `0x4bB8A05D5b40dF7a3B97770E1943461B681B62E9`
 ## Before real Bad Kids
 
 - Confirm `cw721-migration` (`cosmos12gsv9tmjhhg86wg9fnd9cnju28jx3fxva9cn8dh9meketkfxxajqmg3exz`) calls the receiver hook on `send_nft`
-- Escrow with `--no-admin`
-- Renounce the escrow's separate internal EmergencyUnlock admin before enabling public deposits; `--no-admin` alone does not remove it
+- Escrow goes up with a temporary CosmWasm admin so a bad smoke test can be fixed by migrating. Clear it (`clear-contract-admin`) before enabling public deposits
+- Renounce the escrow's separate internal EmergencyUnlock admin before enabling public deposits too, clearing the CosmWasm admin doesn't remove it
 - Audit `parse()` and the escrow receive path, fuzz more
 - Rotate the prover key, it leaked into a chat log
 - Set up Vercel with the artifact proxy, or "Prove it yourself" won't work. See `ui/README.md` Hosting
