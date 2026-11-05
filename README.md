@@ -77,8 +77,42 @@ The full launch runbook for the real collection lives in [`mainnet.md`](mainnet.
 |-|-|
 |Bad Kids cw721 (Hub)|`cosmos12gsv9tmjhhg86wg9fnd9cnju28jx3fxva9cn8dh9meketkfxxajqmg3exz`|
 |Eureka light client (Ethereum)|`0x4bB8A05D5b40dF7a3B97770E1943461B681B62E9`|
-|Escrow (Hub)|not deployed yet|
-|BadBridge (Ethereum)|not deployed yet|
+|Eureka router (Ethereum)|`0x3aF134307D5Ee90faa2ba9Cdba14ba66414CF1A7`|
+|Escrow (Hub)|[`cosmos1x5t4r4ga8a6f6lr4zsgt5l6jw5mmq7nud3tg9hryvp532rdnn55qcer7zh`](https://www.mintscan.io/cosmos/wasm/contract/cosmos1x5t4r4ga8a6f6lr4zsgt5l6jw5mmq7nud3tg9hryvp532rdnn55qcer7zh)|
+|BadBridge (Ethereum)|[`0x496f8D31eF5576A3f7057572829a74a90cF39E9a`](https://etherscan.io/address/0x496f8D31eF5576A3f7057572829a74a90cF39E9a)|
+
+### Mainnet deploy (2026-11-05)
+
+Escrow is code 822, wasm sha256 `6e32b99ee22cdbc3d2814c9dc2ca1dd7924a21e1f3ee9c25ff66c80b6a7183e2`. You can check it against `escrow/artifacts/checksums.txt`.
+
+|Step|Tx|
+|-|-|
+|Store escrow code (height 33744147)|[`D8CD211D…F2DD3F9EA`](https://www.mintscan.io/cosmos/tx/D8CD211D482AD818D736A0C3C292B4C49C0B354A23C6145677A09F7F2DD3F9EA)|
+|Instantiate escrow (height 33744160)|[`CAAE6822…AB8A15A9`](https://www.mintscan.io/cosmos/tx/CAAE6822053FFD622551085243E5808D87D59B56E2795E9B32EE4698AB8A15A9)|
+|Deploy BadBridge (block 26351563)|[`0xe060b3ef…debc0609`](https://etherscan.io/tx/0xe060b3ef8e296afdf104a382ea0be6b83cb052d9e593d5ea121ba430debc0609)|
+
+Escrow instantiate msg is just the collection:
+
+```json
+{"cw721":"cosmos12gsv9tmjhhg86wg9fnd9cnju28jx3fxva9cn8dh9meketkfxxajqmg3exz"}
+```
+
+The CosmWasm admin is `cosmos1reece3m8g4m3d0qrpj93rnnseudnpzhrey64rr` for now. It's only there for EmergencyUnlock during the smoke test and gets cleared before public deposits open.
+
+BadBridge constructor args:
+
+|Param|Value|
+|-|-|
+|router|`0x3aF134307D5Ee90faa2ba9Cdba14ba66414CF1A7`|
+|client id|`cosmoshub-0`|
+|escrow (bytes32)|`0x351751d51d3f749d7c751410ba7f527537b07a7c6c5682dc646069150db39d28`|
+|name / symbol|`Bad Kids` / `BADKIDS`|
+|base URI|`ipfs://QmUoHk4hY6mNoHgNEJDcy94APUky6o8xVmyD3YzddJtUWe/`|
+|contractURI|`data:application/json;base64,...` of the json below|
+
+```json
+{"name":"Bad Kids","description":"Bad Kids is a collection of 9,999 bad drawings of bad kids. Escaped from the Cosmos.","image":"ipfs://QmSFc8TPuVwLUfxEov7s66rfKoJ75NRcBRC4uQjMRcJoZ9/badkids.jpg","external_link":"https://badkids.com/"}
+```
 
 ## Things we learned the hard way
 
