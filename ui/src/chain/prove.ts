@@ -8,7 +8,7 @@
 // so cosmjs-types and the zstd WASM module never load in the demo bundle.
 
 import { fromBase64 } from '@cosmjs/encoding'
-import { bytesToHex, hexToBytes, type Hex } from 'viem'
+import { bytesToHex, decodeAbiParameters, hexToBytes, parseAbiParameters, type Hex } from 'viem'
 import { readContract } from 'viem/actions'
 import type { Deployment } from '../config/deployments'
 import { bridgeAbi, lightClientAbi } from './eth/abi'
@@ -19,13 +19,13 @@ import type { EthWriterWithBatch } from './eth/writer'
 import { escrowRaw, proofHeader, proveAt, storeKey } from './hub/prove'
 import { encodeSp1Stdin, stdinChunks, type StdinRecord } from './hub/stdin'
 import { createTransport } from './hub/transport'
-import { getProveBalance, waitForProof, type ProofRequestProgress, type SuccinctStage } from './succinct/client'
-import { BridgeError, type BatchOptions, type EthAddress, type KidId } from './types'
+import { getProveBalance, MAX_PROOF_COST, waitForProof, type ProofQuote, type ProofRequestProgress, type SuccinctStage } from './succinct/client'
+import { BridgeError, type BatchOptions, type ConsensusStateArgs, type EthAddress, type KidId } from './types'
 
 export type ProveStage = 'finding-proof' | SuccinctStage | 'signing' | 'confirming'
 
 /**
- * bincode(SP1VerifyingKey) for public/membership.elf (batcher/elf/sp1-ics07-tendermint-membership), computed
+ * bincode(SP1VerifyingKey) for public/membership.elf (sp1-ics07-tendermint-membership), computed
  * once offline (2026-09-28) via `ProverClient::builder().mock().build().setup(elf)` — setup() needs no
  * network access, just the ELF, so this never changes unless the ELF does. Verified this session: its
  * bytes32() hash matched the light client's on-chain MEMBERSHIP_PROGRAM_VKEY exactly. If the light client is
@@ -55,15 +55,20 @@ export interface ProveKidsOptions {
   onStage?: (stage: ProveStage) => void
   /** Called with the Succinct request id and its live status while proving. */
   onProgress?: (progress: ProofRequestProgress) => void
+  confirmQuote?: (quote: ProofQuote) => Promise<boolean>
+  onRequestSubmitting?: () => void
+  /** Persist these before requesting a paid proof, so a reload can submit at the original height. */
+  onPrepared?: (height: bigint, consensusState: ConsensusStateArgs) => void
   /**
    * Per-id recipient the caller already believes each kid is headed to (e.g. from useTrip). Checked against
-   * the Hub's own record before proving — the same sanity check the Rust batcher makes (hub.rs's
+   * the Hub's own record before proving — the same sanity check the old Rust batcher made (hub.rs's
    * value-vs-REST cross-check) — since a mismatch means something is lying, not that the record changed.
    */
   expectedRecipients?: ReadonlyMap<KidId, EthAddress>
 }
 
 export interface ProveKidOptions {
+  confirmQuote?: (quote: ProofQuote) => Promise<boolean>
   onStage?: (stage: ProveStage) => void
   expectedRecipient?: EthAddress
 }
@@ -80,6 +85,8 @@ export interface SubmitRequestOptions {
   onProgress?: (progress: ProofRequestProgress) => void
   /** Hub height the proof was made at. Defaults to the light client's latest, which is what proveKids uses. */
   height?: bigint
+  /** Saved alongside height; avoids depending on historical RPC retention during recovery. */
+  consensusState?: ConsensusStateArgs
 }
 
 export interface ProveKidResult {
@@ -125,7 +132,7 @@ export interface ProveKidWriter {
  * PROVE the Succinct account must hold before sending. One proof measured 0.334 PROVE on mainnet 2026-09-28 for
  * 1 kid and for 10 kids alike, so it's per proof, not per kid. 0.34 covers one proof of up to 50 kids.
  */
-export const PROVE_NEEDED = 34n * 10n ** 16n
+export const PROVE_NEEDED = MAX_PROOF_COST
 
 export { MIN_DEPOSIT }
 
@@ -170,10 +177,13 @@ export function createProveKidWriter(deployment: Deployment, ethWriter: EthWrite
     const header = await proofHeader(hubTransport, Number(height))
     const vkHash = await readContract(publicClient, { address: lightClient, abi: lightClientAbi, functionName: 'MEMBERSHIP_PROGRAM_VKEY' })
 
-    const stdinBytes = encodeSp1Stdin(stdinChunks(header.appHash, records))
-    const decoded = await ethWriter.requestGroth16Proof(MEMBERSHIP_NETWORK_VK_HASH, stdinBytes, { onStage, onProgress: options?.onProgress })
-
     const cs = { timestamp: header.timestampNs, root: bytesToHex(header.appHash), nextValidatorsHash: bytesToHex(header.nextValidatorsHash) }
+    options?.onPrepared?.(height, cs)
+    const stdinBytes = encodeSp1Stdin(stdinChunks(header.appHash, records))
+    const decoded = await ethWriter.requestGroth16Proof(MEMBERSHIP_NETWORK_VK_HASH, stdinBytes, {
+      onStage, onProgress: options?.onProgress, confirmQuote: options?.confirmQuote,
+      onRequestSubmitting: options?.onRequestSubmitting,
+    })
     const sp1Proof = { vKey: vkHash, publicValues: decoded.publicValues, proof: decoded.proofBytes }
     const { txHash } = await ethWriter.submitBatch(height, cs, sp1Proof, { onStage })
     return { txHash, proved: records.map((r) => r.id) }
@@ -189,17 +199,23 @@ export function createProveKidWriter(deployment: Deployment, ethWriter: EthWrite
     const lightClient = await readContract(publicClient, { address: bridge, abi: bridgeAbi, functionName: 'lightClient' })
     const vkHash = await readContract(publicClient, { address: lightClient, abi: lightClientAbi, functionName: 'MEMBERSHIP_PROGRAM_VKEY' })
     let height = options?.height
+    if (options?.consensusState && height === undefined) throw new BridgeError('Unknown', 'a saved proof needs its original height')
     if (height === undefined) {
       const [, , latestHeight, , , isFrozen] = await readContract(publicClient, { address: lightClient, abi: lightClientAbi, functionName: 'clientState' })
       if (isFrozen) throw new BridgeError('ClientFrozen', "Ethereum's light client of the Hub is frozen")
       height = latestHeight.revisionHeight
     }
-    const header = await proofHeader(hubTransport, Number(height))
-    // the proof commits to the Hub's app hash, so a wrong height shows up here instead of as an on-chain revert
-    if (!decoded.publicValues.toLowerCase().includes(bytesToHex(header.appHash).slice(2).toLowerCase())) {
+    let cs = options?.consensusState
+    if (!cs) {
+      const header = await proofHeader(hubTransport, Number(height))
+      cs = { timestamp: header.timestampNs, root: bytesToHex(header.appHash), nextValidatorsHash: bytesToHex(header.nextValidatorsHash) }
+    }
+    const [output] = decodeAbiParameters(
+      parseAbiParameters('(bytes32 commitmentRoot, (bytes[] path, bytes value)[] kvPairs)'), decoded.publicValues,
+    )
+    if (output.commitmentRoot.toLowerCase() !== cs.root.toLowerCase()) {
       throw new BridgeError('Unknown', `this proof wasn't made at Hub height ${height}. Enter the height it was proven at.`)
     }
-    const cs = { timestamp: header.timestampNs, root: bytesToHex(header.appHash), nextValidatorsHash: bytesToHex(header.nextValidatorsHash) }
     const sp1Proof = { vKey: vkHash, publicValues: decoded.publicValues, proof: decoded.proofBytes }
     const { txHash } = await ethWriter.submitBatch(height, cs, sp1Proof, { onStage })
     return { txHash }
@@ -208,6 +224,7 @@ export function createProveKidWriter(deployment: Deployment, ethWriter: EthWrite
   async function proveKid(id: KidId, options?: ProveKidOptions): Promise<ProveKidResult> {
     const { txHash } = await proveKids([id], {
       onStage: options?.onStage,
+      confirmQuote: options?.confirmQuote,
       expectedRecipients: options?.expectedRecipient ? new Map([[id, options.expectedRecipient]]) : undefined,
     })
     return { txHash }

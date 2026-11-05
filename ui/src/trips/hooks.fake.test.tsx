@@ -769,6 +769,28 @@ describe('useSendEstimate', () => {
 
 
 describe('useSendKids: fresh light client check', () => {
+  it.each(['clientExpired', 'clientRetired'] as const)('blocks a send when %s changes after the screen check', async (field) => {
+    const chain = fakeChain()
+    const hubWriter = fakeHubWriter(chain, HUB_A)
+    const { wrapper } = fakeBridge(chain, { hubWriter })
+    const { result } = renderHook(() => ({ send: useSendKids(), sanity: useConfigSanity() }), { wrapper })
+    await waitFor(() => expect(result.current.sanity.data?.ok).toBe(true))
+    chain[field] = true
+    await act(() => expect(result.current.send.run([1], ALICE)).rejects.toMatchObject({ code: 'Unknown' }))
+    expect(hubWriter.send).not.toHaveBeenCalled()
+  })
+
+  it.each(['upgrade', 'unlock', 'unreadable'] as const)('blocks a send when escrow authority is %s', async (power) => {
+    const chain = fakeChain()
+    if (power === 'upgrade') chain.contracts.set(LIVE.hub.escrow!, { codeId: 750, admin: HUB_A })
+    if (power === 'unlock') chain.emergencyAdmin = HUB_A
+    if (power === 'unreadable') chain.fail.escrowAdmin = networkError()
+    const hubWriter = fakeHubWriter(chain, HUB_A)
+    const { wrapper } = fakeBridge(chain, { hubWriter })
+    const { result } = renderHook(() => useSendKids(), { wrapper })
+    await act(() => expect(result.current.run([1], ALICE)).rejects.toBeInstanceOf(BridgeError))
+    expect(hubWriter.send).not.toHaveBeenCalled()
+  })
   it('refuses when the client froze after health was read, and never touches the wallet', async () => {
     const chain = fakeChain()
     const hubWriter = fakeHubWriter(chain, HUB_A)
@@ -819,6 +841,7 @@ describe('useTrustFacts', () => {
       escrow: { codeId: 750, admin: REECE },
       collection: { codeId: 431, admin: null },
       routerUpgradeable: true,
+      emergencyAdmin: null,
     })
     expect(result.current.error).toBeNull()
   })
@@ -830,7 +853,7 @@ describe('useTrustFacts', () => {
     const { wrapper } = fakeBridge(chain)
     const { result } = renderHook(() => useTrustFacts(), { wrapper })
     // the cw721 isn't in the fake chain, so its read fails too
-    expect(await loaded(result)).toEqual({ escrow: { codeId: 750, admin: null }, collection: undefined, routerUpgradeable: undefined })
+    expect(await loaded(result)).toEqual({ escrow: { codeId: 750, admin: null }, collection: undefined, routerUpgradeable: undefined, emergencyAdmin: null })
     expect(result.current.error).not.toBeNull()
   })
 
@@ -843,6 +866,7 @@ describe('useTrustFacts', () => {
       escrow: null,
       collection: { codeId: 434, admin: 'cosmos1s8qx0zvz8yd6e4x0mqmqf7fr9vvfn6226hkvrq' },
       routerUpgradeable: null,
+      emergencyAdmin: null,
     })
     expect(eth.proxyImplementation).not.toHaveBeenCalled()
   })

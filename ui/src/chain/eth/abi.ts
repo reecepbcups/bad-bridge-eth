@@ -38,6 +38,7 @@ export const lightClientAbi = parseAbi([
 
 /** IICS02Client.getCounterparty(), the slice of Eureka's ICS26Router the speed-up nudge needs. */
 export const routerAbi = parseAbi([
+  'function getClient(string clientId) view returns (address)',
   'struct CounterpartyInfo { string clientId; bytes[] merklePrefix; }',
   'function getCounterparty(string clientId) view returns (CounterpartyInfo)',
 ])

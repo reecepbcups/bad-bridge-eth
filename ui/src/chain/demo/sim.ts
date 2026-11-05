@@ -17,7 +17,7 @@ import {
 } from '../types'
 import * as seed from './seed'
 
-// An in-memory Hub + Ethereum + batcher on a virtual clock. Sends walk through the real stages:
+// An in-memory Hub + Ethereum + prover on a virtual clock. Sends walk through the real stages:
 // record written at the current Hub height, the light client catches up past it, the proof lands,
 // then the kid can be claimed. Everything is synchronous here; adapter.ts adds latency and async.
 
@@ -84,7 +84,7 @@ export interface DemoSnapshot {
   paused: boolean
   /** Light client frozen: no relays, no proofs. Claims still work. */
   frozen: boolean
-  /** Batcher stuck: relays happen, proofs don't. */
+  /** Prover stuck: relays happen, proofs don't. */
   stuck: boolean
   /** Every read fails with Network. */
   offline: boolean

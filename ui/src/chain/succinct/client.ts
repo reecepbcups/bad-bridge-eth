@@ -5,7 +5,7 @@
 // field number, enum value and default here was read directly off sp1-sdk 6.1.0's source in
 // ~/.cargo/registry (network/{client,prover,utils}.rs and network/proto/**), not guessed.
 
-import { bytesToHex, hexToBytes, type Account, type Address, type Chain, type Client, type Hex, type Transport } from 'viem'
+import { bytesToHex, formatUnits, hexToBytes, type Account, type Address, type Chain, type Client, type Hex, type Transport } from 'viem'
 import { BridgeError } from '../types'
 import { GrpcError, grpcWebCall } from './grpcweb'
 import { decodeGroth16ProofFromNetwork, type DecodedGroth16Proof } from './proof'
@@ -38,6 +38,24 @@ const DEFAULT_CYCLE_LIMIT = 1_000_000_000_000n
  * costs about 0.335. A real proof of 8 to 10 kids used 2.76M PGUs (measured 2026-09-28), 10M leaves room for a 50 kid
  * send and still reserves only about 0.338, under the 0.34 PROVE gate. Too low and the request comes back unfulfillable. */
 const REQUEST_GAS_LIMIT = 10_000_000n
+/** Maximum PROVE this UI may authorize for one proof, in 18-decimal base units. */
+export const MAX_PROOF_COST = 34n * 10n ** 16n
+
+export interface ProofQuote {
+  /** The maximum charge authorized by the exact request being signed. */
+  maxCost: bigint
+}
+
+export function proofQuote(baseFee: string, maxPricePerPgu: string): ProofQuote {
+  if (![baseFee, maxPricePerPgu].every((value) => /^\d{1,78}$/.test(value))) {
+    throw new BridgeError('Unknown', 'the prover returned an invalid fee')
+  }
+  const maxCost = BigInt(baseFee) + BigInt(maxPricePerPgu) * REQUEST_GAS_LIMIT
+  if (maxCost > MAX_PROOF_COST) {
+    throw new BridgeError('FeeTooHigh', `this proof could cost ${formatUnits(maxCost, 18)} PROVE, above the ${formatUnits(MAX_PROOF_COST, 18)} PROVE limit`)
+  }
+  return { maxCost }
+}
 
 /** Ports sp1-sdk's calculate_timeout_from_gas_limit: 5 min floor, 4 hour ceiling, gas_limit/2M in between. */
 function calculateTimeoutSecs(gasLimit: bigint): bigint {
@@ -77,6 +95,10 @@ export interface RequestGroth16ProofOptions {
   /** bincode-encoded SP1Stdin (hub/stdin.ts's encodeSp1Stdin output), not yet zstd-compressed. */
   stdinBytes: Uint8Array
   onStage?: (stage: SuccinctStage) => void
+  /** Must approve the bounded quote before any artifact or proof signature is requested. */
+  confirmQuote?: (quote: ProofQuote) => Promise<boolean>
+  /** Persist recovery intent after signing and before a paid request leaves the browser. May throw to stop submission. */
+  onRequestSubmitting?: () => void
   /** Called with the request id as soon as it's submitted, then on every status poll. */
   onProgress?: (progress: ProofRequestProgress) => void
   /** How often to poll GetProofRequestStatus while proving. Default 5s. */
@@ -238,9 +260,10 @@ function buildRequestBody(opts: {
     .finish()
 }
 
-async function requestProof(wallet: SignerClient, body: Uint8Array, fetchImpl: typeof fetch): Promise<Uint8Array> {
+async function requestProof(wallet: SignerClient, body: Uint8Array, fetchImpl: typeof fetch, onRequestSubmitting?: () => void): Promise<Uint8Array> {
   const signature = await signBytes(wallet, body)
   const req = new MessageWriter().enum(1, MESSAGE_FORMAT_BINARY).bytes32(2, signature).message(3, body).finish()
+  onRequestSubmitting?.()
   const res = await call('/network.ProverNetwork/RequestProof', req, fetchImpl)
   const requestId = res.message(2)?.bytes(1)
   if (!requestId) throw new BridgeError('Unknown', 'RequestProof: no request_id in response')
@@ -263,13 +286,14 @@ export async function requestProofWithNonceRetry(
   buildBody: (nonce: bigint) => Uint8Array,
   nonce: bigint,
   fetchImpl: typeof fetch,
+  onRequestSubmitting?: () => void,
 ): Promise<Uint8Array> {
   try {
-    return await requestProof(wallet, buildBody(nonce), fetchImpl)
+    return await requestProof(wallet, buildBody(nonce), fetchImpl, onRequestSubmitting)
   } catch (e) {
     const match = e instanceof GrpcError ? NONCE_MISMATCH_RE.exec(e.message) : null
     if (!match?.[1]) throw e
-    return requestProof(wallet, buildBody(BigInt(match[1])), fetchImpl)
+    return requestProof(wallet, buildBody(BigInt(match[1])), fetchImpl, onRequestSubmitting)
   }
 }
 
@@ -314,13 +338,18 @@ export async function requestGroth16Proof(opts: RequestGroth16ProofOptions): Pro
     throw new BridgeError('ProgramNotRegistered', 'the membership program is not registered on the Succinct network yet')
   }
 
+  const [nonce, params, whitelist] = await Promise.all([getNonce(address, fetchImpl), getProofRequestParams(fetchImpl), getProversByUptime(fetchImpl)])
+  const quote = proofQuote(params.baseFee, params.maxPricePerPgu)
+  if (!opts.confirmQuote || !(await opts.confirmQuote(quote))) {
+    throw new BridgeError('UserRejected', 'proof request cancelled before signing')
+  }
+
   opts.onStage?.('uploading-stdin')
   const compressed = await zstdCompress(opts.stdinBytes)
   const { artifactUri, presignedUrl } = await createArtifact(opts.wallet, ARTIFACT_TYPE_STDIN, fetchImpl)
   await uploadArtifact(presignedUrl, compressed, fetchImpl)
 
   opts.onStage?.('requesting-proof')
-  const [nonce, params, whitelist] = await Promise.all([getNonce(address, fetchImpl), getProofRequestParams(fetchImpl), getProversByUptime(fetchImpl)])
   const deadline = nowSecs() + calculateTimeoutSecs(DEFAULT_GAS_LIMIT)
   const buildBody = (n: bigint) =>
     buildRequestBody({
@@ -333,7 +362,7 @@ export async function requestGroth16Proof(opts: RequestGroth16ProofOptions): Pro
       whitelist,
       params,
     })
-  const requestId = await requestProofWithNonceRetry(opts.wallet, buildBody, nonce, fetchImpl)
+  const requestId = await requestProofWithNonceRetry(opts.wallet, buildBody, nonce, fetchImpl, opts.onRequestSubmitting)
 
   opts.onStage?.('proving')
   opts.onProgress?.({ requestId: bytesToHex(requestId), fulfillmentStatus: 'requested' })

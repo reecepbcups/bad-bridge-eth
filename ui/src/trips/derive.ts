@@ -1,7 +1,7 @@
 import type { ClientStatus, EscrowRecord, EthAddress, HubAddress, KidEthStatus, KidId } from '../chain/types'
 import type { Stage, Trip } from './types'
 
-/** Seen proving longer than this and the batcher "looks stuck". */
+/** Seen proving longer than this and no prover has picked it up. */
 export const STUCK_AFTER_MS = 30 * 60_000
 
 /** Chain facts about one kid. null means unknown (not found, or the read failed). */
@@ -32,7 +32,7 @@ export interface StageInput {
  * Proven and minted are permanent facts on Ethereum, so they win over everything: unknown Hs, a missing
  * record read, or a frozen client. A frozen client doesn't change the stage; Health.frozen drives the banner.
  *
- * The client must pass Hs (latestHeight > Hs, not >=): the batcher proves against the app hash at client
+ * The client must pass Hs (latestHeight > Hs, not >=): the prover proves against the app hash at client
  * height H, which commits to state after block H-1, and the record is in state after block Hs.
  *
  * `locked` is kept as its own stage rather than folded into `catching-up`: without the client height there's

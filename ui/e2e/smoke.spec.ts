@@ -11,7 +11,8 @@ const VIEWPORTS = [
 const SCHEMES = ['light', 'dark'] as const
 const TABS = [
   { name: 'bridge', hash: '#/', tab: 'Bridge a kid', heading: "Who's crossing?", ready: '#663' },
-  { name: 'kids', hash: '#/kids', tab: 'My kids', heading: 'My kids', ready: '#9254' },
+  { name: 'crossing', hash: '#/crossing', tab: 'Crossing', heading: 'Crossing', ready: '#9254' },
+  { name: 'kids', hash: '#/kids', tab: 'My Eth kids', heading: 'My Eth kids', ready: '#8073' },
   { name: 'about', hash: '#/about', tab: 'About', heading: "What's the Bad Bridge?", ready: 'Contracts' },
 ] as const
 
@@ -43,7 +44,6 @@ for (const colorScheme of SCHEMES) {
           await expect(page.getByRole('heading', { level: 2, name: t.heading })).toBeVisible()
           await expect(page.getByText(t.ready, { exact: true }).first()).toBeVisible()
           await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: t.tab })).toHaveAttribute('aria-current', 'page')
-          await expect(page.getByRole('region', { name: 'Bridge steps' })).toBeVisible({ visible: t.name === 'bridge' })
           await page.evaluate(() => document.fonts.ready)
 
           const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth)
@@ -70,27 +70,29 @@ test('tabs navigate and the badge counts kids on the way', async ({ page }) => {
   const errors = trackErrors(page)
   await page.goto(DEMO)
   const tabs = page.getByRole('navigation', { name: 'Sections' })
-  await expect(tabs.getByRole('link', { name: /My kids/ })).toContainText('2')
-  await tabs.getByRole('link', { name: /My kids/ }).click()
-  await expect(page).toHaveURL(/#\/kids$/)
-  await expect(page.getByRole('heading', { level: 2, name: 'My kids' })).toBeVisible()
+  await expect(tabs.getByRole('link', { name: /Crossing/ })).toContainText('2')
+  await tabs.getByRole('link', { name: /Crossing/ }).click()
+  await expect(page).toHaveURL(/#\/crossing$/)
+  await expect(page.getByRole('heading', { level: 2, name: 'Crossing' })).toBeVisible()
   await tabs.getByRole('link', { name: 'About' }).click()
   await expect(page.getByRole('heading', { level: 2, name: "What's the Bad Bridge?" })).toBeVisible()
   expect(errors).toEqual([])
 })
 
 test('the demo adapter claims a ready kid', async ({ page }) => {
-  await page.goto(`${DEMO}#/kids`)
+  await page.goto(`${DEMO}#/crossing`)
   const row = page.getByRole('listitem').filter({ hasText: '#9254' })
   await expect(row.getByText('ready to claim', { exact: true })).toBeVisible()
   await row.getByRole('button', { name: 'Claim' }).click()
-  await expect(row.getByText('home on Ethereum', { exact: true })).toBeVisible()
-  await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: /My kids/ })).toContainText('1')
+  await expect(row).toHaveCount(0)
+  await expect(page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: /Crossing/ })).toContainText('1')
+  await page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'My Eth kids' }).click()
+  await expect(page.getByRole('listitem').filter({ hasText: '#9254' }).getByText('home on Ethereum', { exact: true })).toBeVisible()
 })
 
 test('dev toolbar skips a crossing kid ahead to ready', async ({ page }) => {
   await page.goto(`${DEMO}#/kid/8783`)
-  await expect(page.getByText('crossing', { exact: true })).toBeVisible()
+  await expect(page.locator('.kid-head').getByText('crossing', { exact: true })).toBeVisible()
   await page.getByRole('navigation', { name: 'Demo controls' }).getByRole('button', { name: 'skip ahead' }).click()
   await expect(page.getByText('ready to claim', { exact: true })).toBeVisible()
 })

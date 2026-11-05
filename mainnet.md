@@ -28,7 +28,7 @@ Pinata is the only public gateway that still serves these. ipfs.io, dweb.link an
 |Env|Value|
 |-|-|
 |`ESCROW`|raw 32 bytes of the new escrow, see step 2|
-|`OWNER`|**TODO** SAFE or none?|
+|`OWNER`|**TODO** approved Ethereum Safe; a nonzero address is required|
 |`ROYALTY_BPS`|`500`|
 |`ROYALTY_RECEIVER`|**TODO** Safe or someone else's 0x? defaults to `OWNER`|
 |`CONTRACT_URI`|below|
@@ -43,30 +43,44 @@ Royalty isn't in the json on purpose, the contract does ERC2981. Owner can chang
 ## Before anything
 
 - [ ] Make the Safe on Ethereum mainnet, 2 of 2, reece + jake
-- [ ] Confirm `cw721_migration` actually calls the receiver hook on `send_nft`. If it doesn't, kids sent to escrow never get recorded. Dry run against the test escrow first
-- [ ] Audit `parse()` and the escrow receive path, fuzz more
+- [ ] Repeat the unsigned `send_nft` simulation against the intended collection and escrow. The 2026-11-05 audit reached the receiver hook and got the expected wrong-collection rejection from the test escrow; this did not move a real kid
+- [ ] Run the contract tests and real-proof fork test described in `README.md`, and rebuild the escrow artifact below
 - [ ] Rotate `NETWORK_PRIVATE_KEY` (the old prover key leaked into a chat log)
-- [ ] Fresh `ETH_PRIVATE_KEY` for the batcher with some ETH for gas
+- [ ] Recheck the source collection's migration admin and resolve that trust assumption with its owners. The bridge cannot remove the source collection administrator's power to change its code
+- [ ] Record the final Safe, royalty receiver, escrow and bridge addresses. None of these launch actions is completed by running the local test suite
+
+The tests exercise this bridge and its integration with the deployed verifier. They are not an independent audit of SP1's circuits, Eureka, or Cosmos Hub consensus.
 
 ## Steps
 
 ### 1. Escrow on the Hub
 
-`scripts/instantiate-escrow.sh` still points at the test cw721. Swap `CW721` to the real one first:
+From the repository root, rebuild the current source with the pinned compiler and verify its checksum:
 
 ```bash
-CW721=cosmos12gsv9tmjhhg86wg9fnd9cnju28jx3fxva9cn8dh9meketkfxxajqmg3exz
+scripts/build-escrow.sh
+(cd escrow/artifacts && shasum -a 256 -c checksums.txt)
 ```
 
-Admin (for EmergencyUnlock) stays `cosmos1reece3m8g4m3d0qrpj93rnnseudnpzhrey64rr` until it's renounced after the smoke test. It's `--no-admin` on the wasm side so nobody can migrate it.
+Set all three deployment choices explicitly. The script has no collection, administrator, or signer defaults, and honors these environment values:
+
+```bash
+export CW721=cosmos12gsv9tmjhhg86wg9fnd9cnju28jx3fxva9cn8dh9meketkfxxajqmg3exz
+export ADMIN=<temporary-emergency-unlock-cosmos-address>
+export FROM_KEY=<local-gaiad-key-name>
+```
+
+The internal `ADMIN` can refund tokens until renounced. `--no-admin` separately prevents CosmWasm code migration. Renounce the internal admin after the operator smoke test and **before enabling public deposits**. Keep the public UI closed throughout deployment and smoke testing.
 
 ```bash
 gaiad tx wasm store escrow/artifacts/bad_bridge_escrow.wasm \
-  --from income --chain-id cosmoshub-4 --gas auto --gas-adjustment 1.3 --gas-prices 0.005uatom \
+  --from "$FROM_KEY" --chain-id cosmoshub-4 --gas auto --gas-adjustment 1.3 --gas-prices 0.005uatom \
   --node https://cosmos-rpc.polkachu.com:443 -y
 
 scripts/instantiate-escrow.sh <code-id> bad-kids-escrow
 ```
+
+Before instantiation, query the uploaded code's checksum and compare it to `escrow/artifacts/checksums.txt`. After instantiation, confirm the configured collection and absent CosmWasm migration admin on chain.
 
 ### 2. Escrow address as bytes32
 
@@ -86,44 +100,32 @@ forge script script/Deploy.s.sol --rpc-url https://ethereum-rpc.publicnode.com -
 
 The script logs owner, royalty receiver, wei per 1 ETH and contractURI. Eyeball them before moving on.
 
-### 4. Batcher
-
-```bash
-cd batcher/service
-BRIDGE=<bridge 0x> \
-ESCROW=<escrow cosmos1...> \
-MEMBERSHIP_ELF=../elf/sp1-ics07-tendermint-membership \
-ETH_PRIVATE_KEY=... \
-NETWORK_PRIVATE_KEY=... \
-cargo run --release
-```
-
-Use the `sp1-programs-v2.0.0` ELF, HEAD builds the wrong vkey.
-
-### 5. UI
+### 4. UI
 
 Fill in the `badkids` entry in `ui/src/config/deployments.ts`, it's `hub(cw721, null)` and `eth(null)` right now:
 
 - escrow address into `hub(...)`
 - bridge address into `eth(...)` and `explorers(...)`
 
-Then update the Deployments section in `README.md`.
+Build the public site with `VITE_DEPLOYMENT=badkids`, then update the Deployments section in `README.md`. Keep it closed until the smoke test and admin checks below pass.
 
 ## Smoke test
 
-1. Send one kid to the escrow with your ETH address as the msg
+1. While the public UI remains closed, have the operator send one kid to the escrow with their ETH address as the msg
 2. If the Eureka client is stale, send a little ATOM over Eureka to nudge it (~10 min)
-3. Wait for the batcher to submit
+3. Open the kid in a local UI build and hit "Prove it yourself"
 4. `claim(id)` and check `ownerOf`, `tokenURI` and `royaltyInfo`
 5. Renounce the escrow admin. While it's alive an `EmergencyUnlock` can put the same kid on both chains, even one with no `Proven` event yet, since any old Eureka root still proves the record. Don't unlock the smoke test kid, just renounce
 
 ```bash
 gaiad tx wasm execute <escrow cosmos1...> '{"renounce_admin":{}}' \
-  --from income --chain-id cosmoshub-4 --gas auto --gas-adjustment 1.3 --gas-prices 0.005uatom \
+  --from <admin-key-name> --chain-id cosmoshub-4 --gas auto --gas-adjustment 1.3 --gas-prices 0.005uatom \
   --node https://cosmos-rpc.polkachu.com:443 -y
 ```
 
-Run it again, it should fail with `unauthorized`. That means the admin is gone.
+Verify that raw escrow storage key `admin` is absent (`61646d696e` in hex), and separately that the contract's CosmWasm migration admin is empty. Simulating another `renounce_admin` from the former admin must fail with `unauthorized`; there is no need to pay for a second transaction. Only then enable public deposits.
+
+The Ethereum bridge permanently pins its light client. A retired, expired or frozen client can stop unfinished transfers; deploying another client alone does not update this bridge. Check the client's health and router mapping before opening deposits. Do not use EmergencyUnlock after any stored Hub root could prove the record, even if no Ethereum `Proven` event exists yet.
 
 ## Open
 

@@ -66,6 +66,9 @@ export interface FakeChain {
   contracts: Map<HubAddress, ContractInfo>
   /** proxyImplementation(): lowercase address → implementation. */
   proxies: Map<string, EthAddress>
+  emergencyAdmin: HubAddress | null
+  clientExpired: boolean
+  clientRetired: boolean
   /** wei, for estimateClaim() */
   gasPrice: bigint
   /** make a read fail: method name → error */
@@ -86,8 +89,11 @@ export function fakeChain(init: Partial<FakeChain> = {}): FakeChain {
     bridgeEscrow: GOOD_ESCROW,
     wiring: { router: LIVE.eth.router, clientId: LIVE.eth.clientId, lightClient: LIVE.eth.lightClient, chainId: LIVE.hub.chainId },
     hubClientId: '08-wasm-1369',
-    contracts: new Map(),
+    contracts: new Map(LIVE.hub.escrow ? [[LIVE.hub.escrow, { codeId: 750, admin: null }]] : []),
     proxies: new Map(),
+    emergencyAdmin: null,
+    clientExpired: false,
+    clientRetired: false,
     gasPrice: 1_000_000_000n,
     fail: {},
     ...init,
@@ -121,6 +127,7 @@ export function fakeReaders(chain: FakeChain) {
     return error ? Promise.reject(error) : Promise.resolve().then(fn)
   }
   const hub = {
+    escrowAdmin: vi.fn(() => guard('escrowAdmin', () => chain.emergencyAdmin)),
     ownedKids: vi.fn((owner: HubAddress) => guard('ownedKids', () => [...(chain.owned.get(owner) ?? [])].sort((a, b) => a - b))),
     record: vi.fn((id: KidId) =>
       guard('record', () => {
@@ -149,6 +156,7 @@ export function fakeReaders(chain: FakeChain) {
     ),
   } satisfies HubReader
   const eth = {
+    clientSafety: vi.fn(() => guard('clientSafety', () => ({ frozen: chain.client.frozen, expired: chain.clientExpired, retired: chain.clientRetired }))),
     client: vi.fn(() => guard('client', () => ({ ...chain.client }))),
     kidStatus: vi.fn((ids: readonly KidId[]) =>
       guard('kidStatus', () => new Map(ids.map((id) => [id, { proven: chain.proven.get(id) ?? null, owner: chain.owners.get(id) ?? null }]))),

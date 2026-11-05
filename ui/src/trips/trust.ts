@@ -9,11 +9,13 @@ import { isLive, type Deployment } from '../config/deployments'
 export interface TrustFacts {
   /** The escrow's code id and admin. null when there's no escrow yet. */
   escrow: ContractInfo | null | undefined
+  /** Raw internal admin: null means emergency unlock has been permanently renounced. */
+  emergencyAdmin: string | null | undefined
   /** The cw721's code id and admin. The escrow holds kids in it, so its admin matters too. */
   collection: ContractInfo | undefined
   /**
-   * The Eureka router BadBridge resolves its light client through is an upgradeable (EIP-1967) proxy, so Eureka
-   * governance can repoint or freeze the client. null when there's no bridge yet.
+   * Whether Eureka's router is an upgradeable (EIP-1967) proxy. Replacing its client entry does not update
+   * BadBridge's immutable client. null when there's no bridge yet.
    */
   routerUpgradeable: boolean | null | undefined
 }
@@ -35,11 +37,12 @@ export async function loadTrustFacts(
 ): Promise<{ value: TrustFacts; error: BridgeError | null }> {
   const failures: BridgeError[] = []
   const escrow = deployment.hub.escrow
-  const [escrowInfo, collection, implementation] = await Promise.all([
+  const [escrowInfo, collection, implementation, emergencyAdmin] = await Promise.all([
     escrow ? attempt(hub.contractInfo(escrow), failures) : Promise.resolve(null),
     attempt(hub.contractInfo(deployment.hub.cw721), failures),
     isLive(deployment) ? attempt(eth.proxyImplementation(deployment.eth.router), failures) : Promise.resolve(null),
+    escrow ? attempt(hub.escrowAdmin(), failures) : Promise.resolve(null),
   ])
   const routerUpgradeable = isLive(deployment) ? (implementation === undefined ? undefined : implementation !== null) : null
-  return { value: { escrow: escrowInfo, collection, routerUpgradeable }, error: failures[0] ?? null }
+  return { value: { escrow: escrowInfo, collection, routerUpgradeable, emergencyAdmin }, error: failures[0] ?? null }
 }

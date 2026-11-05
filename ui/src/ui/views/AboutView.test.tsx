@@ -25,7 +25,7 @@ describe('AboutView trust facts', () => {
     expect(screen.getByText('The ReeceBadTestTwo contract has an admin')).toBeInTheDocument()
     expect(trustList().getAllByRole('link', { name: /cosmos1ree…64rr/ })[0]).toHaveAttribute('href', `https://www.mintscan.io/cosmos/address/${REECE}`)
     expect(screen.getByText(/the Eureka router that points to it can be upgraded/)).toBeInTheDocument()
-    expect(screen.getByText(/Eureka's governance can freeze or replace that client/)).toBeInTheDocument()
+    expect(screen.getByText(/governance can freeze that client or replace the router's entry/)).toBeInTheDocument()
     expect(screen.queryByText(/No admin keys/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/Nobody can pause/i)).not.toBeInTheDocument()
     expect(screen.getByText(/One catch: the ReeceBadTestTwo contract has an admin/)).toBeInTheDocument()
@@ -38,17 +38,27 @@ describe('AboutView trust facts', () => {
     chain.contracts.set(LIVE.hub.cw721, { codeId: 431, admin: null })
     const { wrapper } = fakeBridge(chain)
     render(<AboutView />, { wrapper })
-    expect(await screen.findByText('The escrow has no admin.')).toBeInTheDocument()
+    expect(await screen.findByText('The escrow has no upgrade admin.')).toBeInTheDocument()
+    expect(screen.getByText('Emergency unlock is renounced.')).toBeInTheDocument()
     expect(screen.getByText('The ReeceBadTestTwo contract has no admin.')).toBeInTheDocument()
     expect(screen.queryByText(/router that points to it/)).not.toBeInTheDocument()
     expect(screen.queryByText(/One catch/)).not.toBeInTheDocument()
   })
 
   it("says it couldn't check, rather than guessing", async () => {
-    const { wrapper } = fakeBridge(fakeChain())
+    const { wrapper } = fakeBridge(fakeChain({ contracts: new Map() }))
     render(<AboutView />, { wrapper })
     expect(await screen.findByText("Couldn't check who can change the escrow just now.")).toBeInTheDocument()
-    expect(screen.queryByText('The escrow has no admin.')).not.toBeInTheDocument()
+    expect(screen.queryByText('The escrow has no upgrade admin.')).not.toBeInTheDocument()
+  })
+
+  it('distinguishes renounced migration authority from an active emergency-unlock admin', async () => {
+    const { wrapper } = fakeBridge(fakeChain({ emergencyAdmin: REECE }))
+    render(<AboutView />, { wrapper })
+    expect(await screen.findByText('The escrow has no upgrade admin.')).toBeInTheDocument()
+    expect(screen.getByText('The escrow has an emergency-unlock admin.')).toBeInTheDocument()
+    expect(screen.queryByText('Emergency unlock is renounced.')).not.toBeInTheDocument()
+    expect(screen.queryByText('BadBridge has no owner.')).not.toBeInTheDocument()
   })
 
   it('before launch, only the collection is checked', async () => {

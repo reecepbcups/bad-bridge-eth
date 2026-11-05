@@ -1,11 +1,11 @@
 import { useQuery } from '@tanstack/react-query'
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useBridge } from '../chain/context'
 import { PROVE_NEEDED, type ProveStage } from '../chain/prove'
-import { isLive } from '../config/deployments'
-import type { ProofRequestProgress } from '../chain/succinct/client'
-import type { BridgeError, EthAddress, KidId } from '../chain/types'
-import type { Hex } from 'viem'
+import { isLive, type Deployment } from '../config/deployments'
+import type { ProofQuote, ProofRequestProgress } from '../chain/succinct/client'
+import { BridgeError, type EthAddress, type KidId } from '../chain/types'
+import { formatUnits, type Hex } from 'viem'
 import { ConnectButton } from './Connect'
 import { ErrorNote } from './ErrorNote'
 import { ExtLink } from './ExtLink'
@@ -31,12 +31,38 @@ const REQUEST_STATUS_LABEL: Readonly<Record<ProofRequestProgress['fulfillmentSta
 
 /** Live status of the running Succinct proof request, with a link to watch it on their explorer. */
 export function ProveProgress({ flow }: { flow: ProveFlow }) {
+  const [recoveryLink, setRecoveryLink] = useState('')
+  const recoveryInput = useId()
+  if (flow.quote) {
+    return (
+      <Sheet open onClose={() => flow.confirmQuote(false)} title="Confirm proof cost">
+        <p>This proof can spend up to <b>{formatUnits(flow.quote.maxCost, 18)} PROVE</b> from your Succinct account.</p>
+        <p className="hint">Submitting it to Ethereum later also needs a network fee. Cancelling here spends nothing.</p>
+        <button type="button" className="btn eth" onClick={() => flow.confirmQuote(true)}>Approve this maximum</button>
+      </Sheet>
+    )
+  }
   const request = flow.request
   if (!flow.pending && flow.saved) {
     const { at, requestId } = flow.saved
+    if (flow.saved.requestMayBeSubmitted && !requestId) {
+      const recoveredId = parseRequestId(recoveryLink)
+      return (
+        <div className="hint" role="status">
+          <p>Succinct may have received your paid request, but its reply was lost. Check your wallet’s requests on <ExtLink href="https://explorer.succinct.xyz">Succinct</ExtLink> before paying again.</p>
+          <label htmlFor={recoveryInput}>Request id or explorer link</label>
+          <div className="lookup">
+            <input id={recoveryInput} value={recoveryLink} onChange={(e) => setRecoveryLink(e.target.value)} autoComplete="off" spellCheck={false} />
+            <button type="button" className="btn eth ghost small" disabled={!recoveredId} onClick={() => recoveredId && void flow.resume(recoveredId)}>Resume this proof</button>
+          </div>
+          <button type="button" className="btn ghost small" onClick={flow.clearUnknownRequest}>I checked Succinct: no request was created</button>
+        </div>
+      )
+    }
     return (
       <p className="hint" role="status">
-        Proving, started at {clockTime(new Date(at), new Date())}. Press "Resume proving" to finish it.{' '}
+        Proof started at {clockTime(new Date(at), new Date())}.{' '}
+        <button type="button" className="btn eth ghost small" onClick={() => void flow.resume()}>Resume proving</button>{' '}
         {requestId && <ExtLink href={`${PROVE_REQUEST_URL}/${requestId}`}>Watch on Succinct</ExtLink>}
       </p>
     )
@@ -60,36 +86,56 @@ export function provenToast(ids: readonly KidId[]): Toast {
   }
 }
 
-const SELF_PROVING_KEY = (chainId: string) => `bad-bridge:self-proving:${chainId}`
-/** A reload kills the run, so a remembered proof this old is given up on. */
+const SELF_PROVING_KEY = (d: Deployment) =>
+  `bad-bridge:self-proving:${d.id}:${d.hub.chainId}:${d.hub.escrow}:${d.eth.chainId}:${d.eth.bridge?.toLowerCase()}`
+/** An attempt without a paid request may expire; paid requests stay recoverable. */
 const SELF_PROVING_TTL_MS = 60 * 60_000
 
 /** A "Prove it yourself" that was started and hasn't finished. Survives a reload. */
 export interface SelfProving {
+  /** Prevent an old page's cancelled run from clearing a newer attempt. */
+  attemptId?: string
   ids: readonly KidId[]
   at: number
   /** Known once Succinct has taken the request; lets a reload pick it up instead of paying again. */
   requestId?: Hex
+  /** The request may have been accepted even if its response never reached this browser. */
+  requestMayBeSubmitted?: boolean
+  height?: string
+  consensusState?: { timestamp: string; root: Hex; nextValidatorsHash: Hex }
 }
 
-function loadSelfProving(chainId: string): SelfProving | null {
+function loadSelfProving(deployment: Deployment): SelfProving | null {
   try {
-    const raw = window.localStorage.getItem(SELF_PROVING_KEY(chainId))
+    const raw = window.localStorage.getItem(SELF_PROVING_KEY(deployment))
     const v = raw ? (JSON.parse(raw) as Partial<SelfProving>) : null
-    if (!v || !Array.isArray(v.ids) || typeof v.at !== 'number' || Date.now() - v.at >= SELF_PROVING_TTL_MS) return null
-    const requestId = typeof v.requestId === 'string' ? parseRequestId(v.requestId) : null
-    return { ids: v.ids.filter((n): n is KidId => Number.isInteger(n)), at: v.at, ...(requestId && { requestId }) }
+    if (!v || !Array.isArray(v.ids) || typeof v.at !== 'number' || !Number.isFinite(v.at) || v.at <= 0) return null
+    const ids = v.ids.filter((n): n is KidId => Number.isInteger(n) && n >= 0 && n <= 0xffff_ffff)
+    if (ids.length === 0) return null
+    const requestId = typeof v.requestId === 'string' && /^0x[0-9a-fA-F]{64}$/.test(v.requestId) ? v.requestId : null
+    const requestMayBeSubmitted = v.requestMayBeSubmitted === true
+    if (!requestId && !requestMayBeSubmitted && Date.now() - v.at >= SELF_PROVING_TTL_MS) return null
+    const cs = v.consensusState
+    const hasCheckpoint = typeof v.height === 'string' && /^[1-9]\d{0,19}$/.test(v.height)
+      && cs && typeof cs.timestamp === 'string' && /^\d{1,39}$/.test(cs.timestamp)
+      && typeof cs.root === 'string' && /^0x[0-9a-fA-F]{64}$/.test(cs.root)
+      && typeof cs.nextValidatorsHash === 'string' && /^0x[0-9a-fA-F]{64}$/.test(cs.nextValidatorsHash)
+    if ((requestId || requestMayBeSubmitted) && !hasCheckpoint) return null
+    return { ids, at: v.at, ...(typeof v.attemptId === 'string' && { attemptId: v.attemptId }), ...(requestId && { requestId }), ...(requestMayBeSubmitted && { requestMayBeSubmitted }), ...(hasCheckpoint && { height: v.height, consensusState: cs }) }
   } catch {
     return null
   }
 }
 
-function saveSelfProving(chainId: string, value: SelfProving | null): void {
+function saveSelfProving(deployment: Deployment, value: SelfProving | null): void {
   try {
-    if (value) window.localStorage.setItem(SELF_PROVING_KEY(chainId), JSON.stringify(value))
-    else window.localStorage.removeItem(SELF_PROVING_KEY(chainId))
-  } catch {
-    // remembering is a nicety
+    const key = SELF_PROVING_KEY(deployment)
+    const encoded = value ? JSON.stringify(value) : null
+    if (encoded) window.localStorage.setItem(key, encoded)
+    else window.localStorage.removeItem(key)
+    if (window.localStorage.getItem(key) !== encoded) throw new Error('storage did not retain proof recovery data')
+  } catch (cause) {
+    throw new BridgeError('Unknown', 'This browser could not save proof recovery data. Enable site storage before requesting a paid proof.', { cause })
   }
 }
 
@@ -104,8 +150,11 @@ export interface ProveFlow {
   failure: { error: BridgeError; ids: readonly KidId[] } | null
   /** Started earlier (maybe before a reload) and not finished. */
   saved: SelfProving | null
-  /** Picks the saved proof back up: submits its Succinct request if it has one, else starts over. */
-  resume: () => Promise<void>
+  quote: ProofQuote | null
+  confirmQuote: (accepted: boolean) => void
+  /** A pasted id recovers an accepted request whose response was lost. */
+  resume: (requestId?: Hex) => Promise<void>
+  clearUnknownRequest: () => void
 }
 
 // COPY: prove-my-kids progress (button label and status line)
@@ -121,74 +170,144 @@ const STAGE_LABEL: Readonly<Record<ProveStage, string>> = {
 /** `onProved` runs after a batch lands, so the page can re-read where the kids are now. */
 export function useProveFlow(onProved?: () => void): ProveFlow {
   const { proveKid, deployment } = useBridge()
-  const chainId = deployment.hub.chainId
   const toast = useToast()
-  const [saved, setSaved] = useState<SelfProving | null>(() => loadSelfProving(chainId))
+  const [saved, setSaved] = useState<SelfProving | null>(() => loadSelfProving(deployment))
   const [proving, setProving] = useState<readonly KidId[]>([])
   const [stage, setStage] = useState<ProveStage | null>(null)
   const [request, setRequest] = useState<ProofRequestProgress | null>(null)
   const [failure, setFailure] = useState<ProveFlow['failure']>(null)
+  const [quote, setQuote] = useState<ProofQuote | null>(null)
+  const quoteReply = useRef<((accepted: boolean) => void) | null>(null)
+  const running = useRef(false)
+  const mounted = useRef(true)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false; quoteReply.current?.(false) }
+  }, [])
+
+  const confirmQuote = (accepted: boolean) => {
+    quoteReply.current?.(accepted)
+    quoteReply.current = null
+    setQuote(null)
+  }
+  const mark = (next: SelfProving | null) => {
+    saveSelfProving(deployment, next)
+    setSaved(next)
+  }
+  const clearAttempt = (attempt: SelfProving) => {
+    if (loadSelfProving(deployment)?.attemptId !== attempt.attemptId) return
+    mark(null)
+  }
+  const finish = () => {
+    running.current = false
+    setProving([])
+    setStage(null)
+    setRequest(null)
+  }
 
   const run = async (ids: readonly KidId[], expectedRecipients?: ReadonlyMap<KidId, EthAddress>) => {
-    if (!proveKid || ids.length === 0) return
+    if (!proveKid || ids.length === 0 || running.current) return
+    const previous = loadSelfProving(deployment) ?? saved
+    if (previous?.requestId || previous?.requestMayBeSubmitted) {
+      setSaved(previous)
+      setFailure({ error: new BridgeError('Unknown', 'resume the saved proof before starting another paid request'), ids })
+      return
+    }
+    running.current = true
     setProving(ids)
     setStage(null)
     setRequest(null)
     setFailure(null)
-    const mark = (next: SelfProving) => {
-      setSaved(next)
-      saveSelfProving(chainId, next)
-    }
-    const started: SelfProving = { ids, at: Date.now() }
-    mark(started)
+    const started: SelfProving = { attemptId: crypto.randomUUID(), ids, at: Date.now() }
+    let unfulfillable = false
     try {
+      mark(started)
       const result = await proveKid.proveKids(ids, {
         expectedRecipients,
         onStage: setStage,
+        confirmQuote: (next) => !mounted.current ? Promise.resolve(false) : new Promise((resolve) => {
+          quoteReply.current = resolve
+          setQuote(next)
+        }),
+        onPrepared: (height, cs) => {
+          if (!mounted.current) throw new BridgeError('UserRejected', 'the proving page was closed before submission')
+          started.height = height.toString()
+          started.consensusState = { ...cs, timestamp: cs.timestamp.toString() }
+          mark({ ...started })
+        },
+        onRequestSubmitting: () => {
+          if (!mounted.current) throw new BridgeError('UserRejected', 'the proving page was closed before submission')
+          // Mark before the HTTP call: losing its response must not authorize a second purchase.
+          mark({ ...started, requestMayBeSubmitted: true })
+          started.requestMayBeSubmitted = true
+        },
         onProgress: (p) => {
           setRequest(p)
+          unfulfillable = p.fulfillmentStatus === 'unfulfillable'
           if (p.requestId !== started.requestId) {
             started.requestId = p.requestId
             mark({ ...started })
           }
         },
       })
+      clearAttempt(started)
       toast(provenToast(result.proved))
       onProved?.()
     } catch (e) {
       setFailure({ error: e as BridgeError, ids })
+      if ((!started.requestId && !started.requestMayBeSubmitted) || unfulfillable) {
+        try { clearAttempt(started) } catch { /* No paid request remains; retain the original storage error. */ }
+      } else {
+        // Keep the id visible even if storage became unavailable after Succinct accepted it.
+        setSaved({ ...started })
+      }
     } finally {
-      setSaved(null)
-      saveSelfProving(chainId, null)
-      setProving([])
-      setStage(null)
-      setRequest(null)
+      finish()
     }
   }
 
-  const resume = async () => {
-    if (!proveKid || !saved) return
-    const { ids, requestId } = saved
-    if (!requestId) return run(ids)
+  const resume = async (recoveredId?: Hex) => {
+    if (!proveKid || !saved || running.current) return
+    const { ids, height, consensusState } = saved
+    const requestId = saved.requestId ?? recoveredId
+    if (!requestId) {
+      if (!saved.requestMayBeSubmitted) return run(ids)
+      return
+    }
+    if (!height || !consensusState) return
+    running.current = true
     setProving(ids)
     setStage(null)
     setRequest(null)
     setFailure(null)
+    let unfulfillable = false
     try {
-      const { txHash } = await proveKid.submitRequest(requestId, { onStage: setStage, onProgress: setRequest })
+      mark({ ...saved, requestId })
+      const { txHash } = await proveKid.submitRequest(requestId, {
+        height: BigInt(height), consensusState: { ...consensusState, timestamp: BigInt(consensusState.timestamp) },
+        onStage: setStage,
+        onProgress: (p) => {
+          setRequest(p)
+          unfulfillable = p.fulfillmentStatus === 'unfulfillable'
+        },
+      })
+      clearAttempt(saved)
       toast({ tone: 'ok', title: 'Proof submitted', body: `The proof landed on Ethereum (${txHash.slice(0, 10)}…). Ready kids can be claimed now.` })
       onProved?.()
     } catch (e) {
       setFailure({ error: e as BridgeError, ids })
+      if (unfulfillable) {
+        try { clearAttempt(saved) } catch { /* Keep recovery data if storage cannot clear it. */ }
+      }
     } finally {
-      setSaved(null)
-      saveSelfProving(chainId, null)
-      setProving([])
-      setStage(null)
-      setRequest(null)
+      finish()
     }
   }
-  return { run, pending: proving.length > 0, proving, stage, request, failure, saved, resume }
+  const clearUnknownRequest = () => {
+    if (!saved || saved.requestId || running.current) return
+    try { clearAttempt(saved); setFailure(null) } catch (e) { setFailure({ error: e as BridgeError, ids: saved.ids }) }
+  }
+  return { run, pending: proving.length > 0, proving, stage, request, failure, saved, quote, confirmQuote, resume, clearUnknownRequest }
 }
 
 const REQUEST_ID_RE = /0x[0-9a-fA-F]{64}/

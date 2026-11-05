@@ -1,24 +1,33 @@
 #!/usr/bin/env bash
-# Instantiate the escrow contract, with EmergencyUnlock admin set to reece's hub address.
+# Instantiate the escrow contract for an explicitly chosen collection and temporary EmergencyUnlock admin.
 # No CosmWasm admin (--no-admin): production escrow deployments stay non-migratable.
 #
-# Usage: scripts/instantiate-escrow.sh <code-id> [label]
-# Example: scripts/instantiate-escrow.sh 812
+# Required env: CW721, ADMIN, FROM_KEY. Optional: NODE.
+# Renounce the internal ADMIN before opening the bridge to public deposits.
 
 set -euo pipefail
 
-CW721=cosmos158d2rz0aw8cxx86j0tl8gfwleqyqefr9xdgth2jdfse2d9uumltsu83rfr
-ADMIN=cosmos1reece3m8g4m3d0qrpj93rnnseudnpzhrey64rr
-FROM_KEY=income
-NODE=https://cosmos-rpc.polkachu.com:443
-
-if [ "$#" -lt 1 ]; then
+if [ "$#" -lt 1 ] || [ "$#" -gt 2 ]; then
   echo "usage: $0 <code-id> [label]" >&2
   exit 1
 fi
 
 code_id="$1"
 label="${2:-bad-bridge-escrow}"
+[[ "$code_id" =~ ^[1-9][0-9]*$ ]] || { echo 'code-id must be a positive integer' >&2; exit 1; }
+
+: "${CW721:?Set CW721 to the collection contract you intend to bridge}"
+: "${ADMIN:?Set ADMIN to the temporary emergency-unlock administrator}"
+: "${FROM_KEY:?Set FROM_KEY to the local gaiad key name}"
+NODE="${NODE:-https://cosmos-rpc.polkachu.com:443}"
+
+# Restrict the JSON fields to Hub addresses, then have gaiad check their checksums locally.
+for address in "$CW721" "$ADMIN"; do
+  [[ "$address" =~ ^cosmos1[023456789acdefghjklmnpqrstuvwxyz]+$ ]] || { echo 'CW721 and ADMIN must be Cosmos Hub addresses' >&2; exit 1; }
+  gaiad debug addr "$address" >/dev/null
+done
+
+echo "Collection: $CW721; temporary admin: $ADMIN; signer: $FROM_KEY; code: $code_id" >&2
 
 gaiad tx wasm instantiate "$code_id" \
   '{"cw721":"'"$CW721"'","admin":"'"$ADMIN"'"}' \

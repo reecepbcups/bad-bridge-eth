@@ -1,5 +1,5 @@
 // A single escrow record's ICS-23 membership proof, plus the block header needed to rebuild the light
-// client's ConsensusState. Ports batcher/service/src/hub.rs's store_key/prove_at/header, scoped to one
+// client's ConsensusState. Ports the old Rust batcher's store_key/prove_at/header, scoped to one
 // token id: the browser page only ever proves the connected wallet's own kid, never a full batch.
 
 import { fromBase64, fromBech32, fromHex, toHex } from '@cosmjs/encoding'
@@ -62,7 +62,12 @@ export async function proveAt(t: Transport, height: number, key: Uint8Array): Pr
       const response = isRecord(result) && isRecord(result.response) ? result.response : null
       if (!response) throw new EndpointError(`${base} abci_query: no response`)
       const code = typeof response.code === 'number' ? response.code : 0
-      if (code !== 0) throw new ChainError(typeof response.log === 'string' ? response.log : `abci code ${code}`, code)
+      if (code !== 0) {
+        const log = typeof response.log === 'string' ? response.log : `abci code ${code}`
+        // Historical state availability differs by node; an archive fallback may still have this height.
+        if (/pruned|version does not exist|height .*not available/i.test(log)) throw new EndpointError(log)
+        throw new ChainError(log, code)
+      }
 
       const value = typeof response.value === 'string' ? fromBase64(response.value) : new Uint8Array()
       if (value.length === 0) return null

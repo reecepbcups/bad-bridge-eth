@@ -21,7 +21,7 @@ import {
   type Sp1ProofArgs,
   type SubmitBatchResult,
 } from '../types'
-import { registerProgram as registerProgramImpl, requestGroth16Proof as requestGroth16ProofImpl, type ProofRequestProgress, type SuccinctStage } from '../succinct/client'
+import { registerProgram as registerProgramImpl, requestGroth16Proof as requestGroth16ProofImpl, type ProofQuote, type ProofRequestProgress, type SuccinctStage } from '../succinct/client'
 import type { DecodedGroth16Proof } from '../succinct/proof'
 import { bridgeAbi } from './abi'
 import { depositProve as depositProveImpl, ethUsdPrice as ethUsdPriceImpl, quoteProve as quoteProveImpl, swapEthForProve as swapEthForProveImpl, walletProveBalance as walletProveBalanceImpl } from './fundProve'
@@ -75,6 +75,8 @@ export interface EthWriterWithBatch extends EthWriter {
   requestGroth16Proof(vkHash: Hex, stdinBytes: Uint8Array, options?: {
       onStage?: (stage: SuccinctStage) => void
       onProgress?: (progress: ProofRequestProgress) => void
+      confirmQuote?: (quote: ProofQuote) => Promise<boolean>
+      onRequestSubmitting?: () => void
     },
   ): Promise<DecodedGroth16Proof>
   /**
@@ -249,9 +251,11 @@ export function createEthWriter(deps: EthWriterDeps): EthWriterWithBatch {
     stdinBytes: Uint8Array,
     onStage: ((stage: SuccinctStage) => void) | undefined,
     onProgress: ((progress: ProofRequestProgress) => void) | undefined,
+    confirmQuote: ((quote: ProofQuote) => Promise<boolean>) | undefined,
+    onRequestSubmitting: (() => void) | undefined,
   ): Promise<DecodedGroth16Proof> {
     const wallet = await getWallet()
-    return requestGroth16ProofImpl({ wallet, vkHash, stdinBytes, onStage, onProgress })
+    return requestGroth16ProofImpl({ wallet, vkHash, stdinBytes, onStage, onProgress, confirmQuote, onRequestSubmitting })
   }
 
   async function registerProgram(vkHash: Hex, vk: Uint8Array, elf: Uint8Array): Promise<void> {
@@ -283,7 +287,7 @@ export function createEthWriter(deps: EthWriterDeps): EthWriterWithBatch {
     },
     requestGroth16Proof: async (vkHash, stdinBytes, options) => {
       try {
-        return await requestGroth16Proof(vkHash, stdinBytes, options?.onStage, options?.onProgress)
+        return await requestGroth16Proof(vkHash, stdinBytes, options?.onStage, options?.onProgress, options?.confirmQuote, options?.onRequestSubmitting)
       } catch (e) {
         throw toEthError(e)
       }

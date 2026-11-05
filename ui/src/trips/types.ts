@@ -37,7 +37,7 @@ export interface Trip {
    */
   provingSince?: Date
   /**
-   * Seen proving for more than 30 minutes (see provingSince): the batcher looks stuck. Never set while the
+   * Seen proving for more than 30 minutes (see provingSince): no prover has picked it up. Never set while the
    * client is frozen, since then nothing can be proven and the site-wide "paused" state explains it.
    */
   stuck: boolean
@@ -91,6 +91,8 @@ export interface WiringMismatch {
 export type ConfigProblem = (
   /** the deployment has no escrow or bridge yet */
   | { code: 'NotLive' }
+  | { code: 'ClientUnavailable'; reason: 'frozen' | 'expired' | 'retired' }
+  | { code: 'EscrowAdmin'; power: 'upgrade' | 'emergency unlock'; admin: HubAddress }
   /** the escrow accepts a different cw721 than the deployment's */
   | { code: 'EscrowCollection'; expected: HubAddress; actual: HubAddress }
   /** bridge.ESCROW() isn't the deployment's escrow (or isn't 32 bytes, or the configured escrow isn't) */

@@ -53,6 +53,6 @@ describe('abi', () => {
 
   // From `cast sig "getCounterparty(string)"`: IICS02Client on Eureka's ICS26Router (cosmos/ibc-contracts).
   it('has the IICS02Client getCounterparty() selector', () => {
-    expect(toFunctionSelector(routerAbi.find((x) => x.type === 'function')!)).toBe('0xb0777bfa')
+    expect(toFunctionSelector(routerAbi.find((x) => x.type === 'function' && x.name === 'getCounterparty')!)).toBe('0xb0777bfa')
   })
 })
