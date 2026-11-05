@@ -38,7 +38,14 @@ export const NOW_HEIGHT = 10_000
 export const NOW_TIME = Date.parse('2026-09-27T17:00:00Z')
 
 export const LIVE: Deployment = DEPLOYMENTS['reece-test']
-export const NOT_LIVE: Deployment = DEPLOYMENTS.badkids
+// Bad Kids as it was before launch, with no escrow or bridge yet.
+const realBadkids = DEPLOYMENTS.badkids
+export const NOT_LIVE: Deployment = {
+  ...realBadkids,
+  hub: { ...realBadkids.hub, escrow: null },
+  eth: { ...realBadkids.eth, bridge: null },
+  explorer: { ...realBadkids.explorer, ethToken: () => null, opensea: () => null, openseaCollection: () => null },
+}
 export const GOOD_ESCROW = escrowBytes32(LIVE.hub.escrow ?? '') as Hex
 
 /** Mutable chain state. Tests poke it between reads. */

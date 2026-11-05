@@ -160,15 +160,20 @@ const badkidsTest: Deployment = {
   sourceUrl: SOURCE,
 }
 
-/** The real collection. Escrow and bridge don't exist yet, so the app shows "not live yet". */
+const BADKIDS_BRIDGE: Address = '0x496f8D31eF5576A3f7057572829a74a90cF39E9a'
+
+/** The real collection. Escrow (code 822) and bridge deployed 2026-11-05. */
 const badkids: Deployment = {
   id: 'badkids',
   collectionName: 'Bad Kids',
   collectionSize: 9999,
   demo: false,
-  hub: hub('cosmos12gsv9tmjhhg86wg9fnd9cnju28jx3fxva9cn8dh9meketkfxxajqmg3exz', null),
-  eth: eth(null),
-  explorer: explorers(null),
+  hub: hub(
+    'cosmos12gsv9tmjhhg86wg9fnd9cnju28jx3fxva9cn8dh9meketkfxxajqmg3exz',
+    'cosmos1x5t4r4ga8a6f6lr4zsgt5l6jw5mmq7nud3tg9hryvp532rdnn55qcer7zh',
+  ),
+  eth: eth(BADKIDS_BRIDGE),
+  explorer: explorers(BADKIDS_BRIDGE),
   sourceUrl: SOURCE,
 }
 

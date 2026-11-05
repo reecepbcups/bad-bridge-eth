@@ -3,6 +3,7 @@ import { bytesToHex, type Hex } from 'viem'
 import type { BridgeWiring } from '../chain/types'
 import { describe, expect, it } from 'vitest'
 import { DEPLOYMENTS } from '../config/deployments'
+import { NOT_LIVE } from './fakes'
 import { checkConfig, describeConfigProblem, escrowBytes32 } from './sanity'
 
 const live = DEPLOYMENTS['reece-test']
@@ -52,7 +53,7 @@ describe('checkConfig', () => {
   })
 
   it('treats a missing escrow or bridge as not live', () => {
-    expect(checkConfig(DEPLOYMENTS.badkids, DEPLOYMENTS.badkids.hub.cw721, good, wired)).toMatchObject({
+    expect(checkConfig(NOT_LIVE, NOT_LIVE.hub.cw721, good, wired)).toMatchObject({
       ok: false,
       status: 'not-live',
       problems: [{ code: 'NotLive' }],
