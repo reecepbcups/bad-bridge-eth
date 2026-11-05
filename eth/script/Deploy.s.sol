@@ -3,6 +3,7 @@ pragma solidity ^0.8.28;
 
 import { Script, console } from "forge-std/Script.sol";
 import { BadBridge, IRouter } from "../src/BadBridge.sol";
+import { Base64 } from "@openzeppelin/contracts/utils/Base64.sol";
 
 /// Production deploy. There's no owner, so CONTRACT_URI is final once this runs.
 /// env: ESCROW (raw 32-byte Hub escrow address)
@@ -14,8 +15,11 @@ contract Deploy is Script {
         require(escrow != bytes32(0), "ESCROW unset");
         string memory contractURI = vm.envOr(
             "CONTRACT_URI",
-            string(
-                'data:application/json;utf8,{"name":"Bad Kids","description":"Bad Kids is a collection of 9,999 bad drawings of bad kids","image":"ipfs://QmSFc8TPuVwLUfxEov7s66rfKoJ75NRcBRC4uQjMRcJoZ9/badkids.jpg","external_link":"https://badkids.com/"}'
+            string.concat(
+                "data:application/json;base64,",
+                Base64.encode(
+                    '{"name":"Bad Kids","description":"Bad Kids is a collection of 9,999 bad drawings of bad kids","image":"ipfs://QmSFc8TPuVwLUfxEov7s66rfKoJ75NRcBRC4uQjMRcJoZ9/badkids.jpg","external_link":"https://badkids.com/"}'
+                )
             )
         );
 

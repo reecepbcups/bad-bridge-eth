@@ -30,11 +30,13 @@ Pinata is the only public gateway that still serves these. ipfs.io, dweb.link an
 |`ESCROW`|raw 32 bytes of the new escrow, see step 2|
 |`NAME` / `SYMBOL` / `BASE_URI` / `CONTRACT_URI`|defaults in `Deploy.s.sol` already match chain, don't set|
 
-Default `CONTRACT_URI`:
+Default `CONTRACT_URI` is this json, base64'd into a `data:application/json;base64,` uri:
 
-```text
-data:application/json;utf8,{"name":"Bad Kids","description":"Bad Kids is a collection of 9,999 bad drawings of bad kids","image":"ipfs://QmSFc8TPuVwLUfxEov7s66rfKoJ75NRcBRC4uQjMRcJoZ9/badkids.jpg","external_link":"https://badkids.com/"}
+```json
+{"name":"Bad Kids","description":"Bad Kids is a collection of 9,999 bad drawings of bad kids","image":"ipfs://QmSFc8TPuVwLUfxEov7s66rfKoJ75NRcBRC4uQjMRcJoZ9/badkids.jpg","external_link":"https://badkids.com/"}
 ```
+
+The deploy log prints the base64 form. Check it with `echo <after base64,> | base64 -d`.
 
 The bridge has no owner, so `contractURI` can't be changed after deploy. Double check it before you broadcast. No royalty either, on purpose.
 
