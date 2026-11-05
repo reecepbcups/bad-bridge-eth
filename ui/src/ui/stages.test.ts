@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import type { Stage } from '../trips/types'
-import { provingSeen, PROVING_QUIET_MS } from './StageList'
 import { JOURNEY, JOURNEY_AT, lowerFirst, STAGE_LINE, TRACK_LABELS } from './stages'
 
 const STAGES: readonly Stage[] = ['home-hub', 'locked', 'catching-up', 'crossing', 'proving', 'ready', 'home-eth']
@@ -30,16 +29,5 @@ describe('one journey vocabulary', () => {
       expect(STAGE_LINE[stage]).not.toMatch(/batcher|send_nft|Eureka|Seen\b/)
     }
     expect(lowerFirst(STAGE_LINE['catching-up'])).toBe('waiting for Ethereum to catch up')
-  })
-})
-
-describe('provingSeen', () => {
-  const since = new Date(2026, 8, 27, 21, 41)
-  it('says nothing for the first few minutes', () => {
-    expect(provingSeen(undefined, since.getTime() + PROVING_QUIET_MS)).toBeNull()
-    expect(provingSeen(since, since.getTime() + PROVING_QUIET_MS - 1)).toBeNull()
-  })
-  it('then says since when this device has seen it proving', () => {
-    expect(provingSeen(since, since.getTime() + PROVING_QUIET_MS)).toBe('Seen proving on this device since 9:41 pm.')
   })
 })

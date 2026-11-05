@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { useBridge } from '../chain/context'
 import { useDemoControls } from '../chain/demo/controls'
 import { DEMO_ETH, DEMO_HUB } from '../chain/demo/seed'
 import { demoWrapper } from '../test/demo'
@@ -37,13 +38,13 @@ describe('trip hooks over the demo adapter', () => {
     const { result } = renderHook(() => ({ health: useHealth(), sanity: useConfigSanity() }), { wrapper: demoWrapper() })
     await waitFor(() => expect(result.current.sanity.data).toBeDefined())
     await waitFor(() => expect(result.current.health.data).toBeDefined())
-    expect(result.current.sanity.data).toEqual({ ok: true, status: 'ok', problems: [] })
+    expect(result.current.sanity.data).toEqual({ ok: true, status: 'ok', problems: [], warnings: [] })
     expect(result.current.health.data).toMatchObject({ lagBlocks: 100, lagMinutes: 10, frozen: false, stale: false })
   })
 
   it('walks a send through every stage to home', async () => {
     const { result } = renderHook(
-      () => ({ send: useSendKids(), claim: useClaimKids(), trips: useTrips({ ids: [9176] }, { live: true }), controls: useDemoControls() }),
+      () => ({ send: useSendKids(), claim: useClaimKids(), trips: useTrips({ ids: [9176] }, { live: true }), controls: useDemoControls(), bridge: useBridge() }),
       { wrapper: demoWrapper() },
     )
     const stage = () => result.current.trips.data?.[0]?.stage
@@ -56,7 +57,7 @@ describe('trip hooks over the demo adapter', () => {
     act(() => void result.current.controls?.skip()) // relay: the client passes Hs
     await waitFor(() => expect(stage()).toBe('proving'))
 
-    act(() => void result.current.controls?.skip()) // the proof lands
+    await act(() => result.current.bridge.proveKid!.proveKids([9176])) // "Prove it"
     await waitFor(() => expect(stage()).toBe('ready'))
 
     await act(() => result.current.claim.run([9176]))

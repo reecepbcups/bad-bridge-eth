@@ -29,7 +29,8 @@ describe('DemoSim', () => {
     expect(sim.client().latestHeight).toBeGreaterThan(height)
     expect(stageOf(sim, 9176)).toBe('proving')
 
-    expect(sim.skip()).toBe(true) // proof lands
+    expect(sim.skip()).toBe(false) // nobody proves it but you
+    expect(sim.prove([9176, 6413])).toEqual([9176, 6413])
     expect(stageOf(sim, 9176)).toBe('ready')
 
     sim.claim([9176, 6413])
@@ -37,18 +38,18 @@ describe('DemoSim', () => {
     expect(sim.kidStatus([6413]).get(6413)?.owner).toBe(DEMO_ETH)
   })
 
-  it('holds proofs while stuck or frozen, and releases them after', () => {
+  it('never proves on its own, and holds relays and proofs while frozen', () => {
     const sim = newSim()
     sim.commitSend(DEMO_HUB, [9176], DEMO_ETH)
+    expect(() => sim.prove([9176])).toThrow(/nothing to prove/)
     sim.setFrozen(true)
     expect(sim.skip()).toBe(false)
     sim.setFrozen(false)
     sim.skip()
-    sim.setStuck(true)
     sim.advance(60 * 60_000)
     expect(stageOf(sim, 9176)).toBe('proving')
-    sim.setStuck(false)
-    expect(stageOf(sim, 9176)).toBe('ready')
+    sim.setFrozen(true)
+    expect(() => sim.prove([9176])).toThrow(expect.objectContaining({ code: 'ClientFrozen' }) as Error)
   })
 
   it('rejects sends the escrow would reject', () => {

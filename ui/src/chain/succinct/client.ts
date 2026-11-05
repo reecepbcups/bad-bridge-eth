@@ -36,10 +36,10 @@ const DEFAULT_GAS_LIMIT = 1_000_000_000n
 const DEFAULT_CYCLE_LIMIT = 1_000_000_000_000n
 /** What a request reserves is base_fee + max_price_per_pgu * this, so 1e9 reserved 0.86 PROVE for a proof that
  * costs about 0.335. A real proof of 8 to 10 kids used 2.76M PGUs (measured 2026-09-28), 10M leaves room for a 50 kid
- * send and still reserves only about 0.338, under the 0.34 PROVE gate. Too low and the request comes back unfulfillable. */
+ * send and still reserves only about 0.338, under the 1 PROVE gate. Too low and the request comes back unfulfillable. */
 const REQUEST_GAS_LIMIT = 10_000_000n
 /** Maximum PROVE this UI may authorize for one proof, in 18-decimal base units. */
-export const MAX_PROOF_COST = 34n * 10n ** 16n
+export const MAX_PROOF_COST = 10n ** 18n
 
 export interface ProofQuote {
   /** The maximum charge authorized by the exact request being signed. */
@@ -101,6 +101,8 @@ export interface RequestGroth16ProofOptions {
   onRequestSubmitting?: () => void
   /** Called with the request id as soon as it's submitted, then on every status poll. */
   onProgress?: (progress: ProofRequestProgress) => void
+  /** Called once per signed request body, with its request id if the network accepted it. For the activity log. */
+  onSigned?: (requestId: Hex | undefined) => void
   /** How often to poll GetProofRequestStatus while proving. Default 5s. */
   pollMs?: number
   fetchImpl?: typeof fetch
@@ -260,14 +262,26 @@ function buildRequestBody(opts: {
     .finish()
 }
 
-async function requestProof(wallet: SignerClient, body: Uint8Array, fetchImpl: typeof fetch, onRequestSubmitting?: () => void): Promise<Uint8Array> {
+async function requestProof(
+  wallet: SignerClient,
+  body: Uint8Array,
+  fetchImpl: typeof fetch,
+  onRequestSubmitting?: () => void,
+  onSigned?: (requestId: Hex | undefined) => void,
+): Promise<Uint8Array> {
   const signature = await signBytes(wallet, body)
-  const req = new MessageWriter().enum(1, MESSAGE_FORMAT_BINARY).bytes32(2, signature).message(3, body).finish()
-  onRequestSubmitting?.()
-  const res = await call('/network.ProverNetwork/RequestProof', req, fetchImpl)
-  const requestId = res.message(2)?.bytes(1)
-  if (!requestId) throw new BridgeError('Unknown', 'RequestProof: no request_id in response')
-  return requestId
+  let requestId: Uint8Array | undefined
+  try {
+    const req = new MessageWriter().enum(1, MESSAGE_FORMAT_BINARY).bytes32(2, signature).message(3, body).finish()
+    onRequestSubmitting?.()
+    const res = await call('/network.ProverNetwork/RequestProof', req, fetchImpl)
+    requestId = res.message(2)?.bytes(1)
+    if (!requestId) throw new BridgeError('Unknown', 'RequestProof: no request_id in response')
+    return requestId
+  } finally {
+    // signed either way, so it's logged either way
+    onSigned?.(requestId && bytesToHex(requestId))
+  }
 }
 
 const NONCE_MISMATCH_RE = /failed nonce verification:.*expected (\d+), got \d+/
@@ -287,13 +301,14 @@ export async function requestProofWithNonceRetry(
   nonce: bigint,
   fetchImpl: typeof fetch,
   onRequestSubmitting?: () => void,
+  onSigned?: (requestId: Hex | undefined) => void,
 ): Promise<Uint8Array> {
   try {
-    return await requestProof(wallet, buildBody(nonce), fetchImpl, onRequestSubmitting)
+    return await requestProof(wallet, buildBody(nonce), fetchImpl, onRequestSubmitting, onSigned)
   } catch (e) {
     const match = e instanceof GrpcError ? NONCE_MISMATCH_RE.exec(e.message) : null
     if (!match?.[1]) throw e
-    return requestProof(wallet, buildBody(BigInt(match[1])), fetchImpl, onRequestSubmitting)
+    return requestProof(wallet, buildBody(BigInt(match[1])), fetchImpl, onRequestSubmitting, onSigned)
   }
 }
 
@@ -362,7 +377,7 @@ export async function requestGroth16Proof(opts: RequestGroth16ProofOptions): Pro
       whitelist,
       params,
     })
-  const requestId = await requestProofWithNonceRetry(opts.wallet, buildBody, nonce, fetchImpl, opts.onRequestSubmitting)
+  const requestId = await requestProofWithNonceRetry(opts.wallet, buildBody, nonce, fetchImpl, opts.onRequestSubmitting, opts.onSigned)
 
   opts.onStage?.('proving')
   opts.onProgress?.({ requestId: bytesToHex(requestId), fulfillmentStatus: 'requested' })

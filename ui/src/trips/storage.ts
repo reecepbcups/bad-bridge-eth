@@ -8,7 +8,6 @@ import type { DeploymentId } from '../config/deployments'
 // 1. Remembered trips (`bad-bridge:trips:<deployment>`): kids this browser sent or claimed, with what the
 //    send told us. They show up without a lookup, and the send height is a fallback while tx search hasn't
 //    indexed the send yet.
-// 2. First sighting in `proving` (`bad-bridge:proving:<deployment>`): see firstSeenProving().
 
 /** A kid this browser sent or claimed. Everything but the id is optional (claims and old entries have less). */
 export interface RememberedTrip {
@@ -27,11 +26,8 @@ export interface RememberedTrip {
 
 /** Oldest entries are dropped past this, so storage can't grow forever. */
 const MAX_REMEMBERED = 500
-/** First sightings older than this are dropped on load; no proof takes a month. */
-const PROVING_TTL_MS = 30 * 24 * 60 * 60_000
 
 const TRIPS_PREFIX = 'bad-bridge:trips:'
-const PROVING_PREFIX = 'bad-bridge:proving:'
 
 interface Remembered {
   details: readonly RememberedTrip[]
@@ -39,7 +35,6 @@ interface Remembered {
 }
 
 const remembered = new Map<DeploymentId, Remembered>()
-const proving = new Map<DeploymentId, Map<KidId, number>>()
 const listeners = new Set<() => void>()
 
 // ---- storage access, all wrapped ----
@@ -171,9 +166,8 @@ export function subscribeRemembered(listener: () => void): () => void {
 
 /** Another tab wrote: drop the in-memory copies so the next read reloads. */
 function onStorage(e: StorageEvent): void {
-  if (e.key !== null && !e.key.startsWith(TRIPS_PREFIX) && !e.key.startsWith(PROVING_PREFIX)) return
+  if (e.key !== null && !e.key.startsWith(TRIPS_PREFIX)) return
   remembered.clear()
-  proving.clear()
   notify()
 }
 
@@ -181,56 +175,7 @@ function notify(): void {
   for (const listener of listeners) listener()
 }
 
-// ---- first sighting in `proving` ----
-//
-// There are no light-client events to read, so the moment the client passed Hs (the start of `proving`) is
-// unknowable after the fact. Instead this browser records the first time it saw each kid in `proving`, and
-// "stuck" means seen proving for more than 30 minutes. That's conservative: the checkpoint passed at or before
-// the first sighting, so the real wait is at least as long. A fresh device (or cleared storage) starts its
-// clock at first sight; with storage unusable, the clock lives for this tab only.
-
-function provingMap(deployment: DeploymentId, now: number): Map<KidId, number> {
-  let map = proving.get(deployment)
-  if (!map) {
-    map = new Map()
-    const raw = readJson(PROVING_PREFIX + deployment)
-    if (typeof raw === 'object' && raw !== null && !Array.isArray(raw)) {
-      for (const [key, at] of Object.entries(raw as Record<string, unknown>)) {
-        const id = Number(key)
-        if (isKidId(id) && typeof at === 'number' && Number.isFinite(at) && at <= now && now - at < PROVING_TTL_MS) {
-          map.set(id, at)
-        }
-      }
-    }
-    proving.set(deployment, map)
-  }
-  return map
-}
-
-function saveProving(deployment: DeploymentId, map: Map<KidId, number>): void {
-  writeJson(PROVING_PREFIX + deployment, Object.fromEntries(map))
-}
-
-/** When this browser first saw `id` proving (ms). Records `now` if this is the first sighting. */
-export function firstSeenProving(deployment: DeploymentId, id: KidId, now: number): number {
-  const map = provingMap(deployment, now)
-  const seen = map.get(id)
-  if (seen !== undefined) return seen
-  map.set(id, now)
-  saveProving(deployment, map)
-  return now
-}
-
-/** The kids left `proving` for good (proven or minted): forget their first sightings. */
-export function forgetProving(deployment: DeploymentId, ids: readonly KidId[], now: number): void {
-  const map = provingMap(deployment, now)
-  let changed = false
-  for (const id of ids) changed = map.delete(id) || changed
-  if (changed) saveProving(deployment, map)
-}
-
 /** Drops the in-memory copies (tests only; the next read reloads from storage). */
 export function resetTripStorage(): void {
   remembered.clear()
-  proving.clear()
 }

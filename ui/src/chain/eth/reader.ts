@@ -1,5 +1,5 @@
-import { getAddress, zeroAddress, type Address, type Chain, type Client, type Hex, type Transport } from 'viem'
-import { estimateContractGas, getCode, getGasPrice, getStorageAt, multicall, readContract } from 'viem/actions'
+import { getAddress, TransactionReceiptNotFoundError, zeroAddress, type Address, type Chain, type Client, type Hex, type Transport } from 'viem'
+import { estimateContractGas, getCode, getGasPrice, getStorageAt, getTransactionReceipt, multicall, readContract } from 'viem/actions'
 import type { Deployment } from '../../config/deployments'
 import {
   BridgeError,
@@ -187,6 +187,18 @@ export function createEthReader(deployment: Deployment, options: EthReaderOption
         ])
         const gas = simulated ?? typicalClaimGas(Math.max(1, unique.length))
         return { gas: Number(gas), gasPrice: gasPrice.toString(), fee: (gas * gasPrice).toString(), simulated: simulated !== null }
+      }),
+
+    txStatus: (hash) =>
+      guard(async () => {
+        try {
+          const receipt = await getTransactionReceipt(client, { hash })
+          return receipt.status === 'success' ? 'confirmed' : 'failed'
+        } catch (e) {
+          // not mined yet, or dropped: either way not in a block
+          if (e instanceof TransactionReceiptNotFoundError) return 'pending'
+          throw e
+        }
       }),
 
     hubClientId: () =>

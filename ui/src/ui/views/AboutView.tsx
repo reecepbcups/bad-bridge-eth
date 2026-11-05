@@ -64,7 +64,7 @@ export function AboutView() {
           <li>
             <span className="n">2</span>
             <span className="where mid">In between</span>
-            <b>We prove they left</b>A zero-knowledge proof shows Ethereum that the kids really are locked on the Hub.
+            <b>You prove they left</b>From your wallet, a zero-knowledge proof shows Ethereum that the kids really are locked on the Hub.
           </li>
           <li>
             <span className="n">3</span>
@@ -93,8 +93,8 @@ export function AboutView() {
           <details>
             <summary>Why does it take a while?</summary>
             <p>
-              Ethereum only learns about new Hub blocks when IBC Eureka relays a transfer. After that, the prover bundles
-              waiting kids into one proof. So the wait depends on how far behind Ethereum is
+              Ethereum only learns about new Hub blocks when IBC Eureka relays a transfer. After that, you prove
+              them, and one proof covers all your waiting kids. So the wait depends on how far behind Ethereum is
               {lag ? <>: right now that's {lag}.</> : '.'}
               {/* COPY: FAQ wait time */}
             </p>
@@ -107,7 +107,7 @@ export function AboutView() {
             <summary>What happens to the kid on the Hub?</summary>
             <p>
               It stays locked in the escrow. Permanent locking requires both the escrow's upgrade admin and its separate
-              emergency-unlock admin to be removed; the send screen checks both.
+              emergency-unlock admin to be removed; the site flags both.
               {emergencyAdmin ? ' This escrow still has an emergency-unlock admin who can return deposited kids.' : ''}
               {collectionAdmin
                 ? ` One catch: the ${deployment.collectionName} contract has an admin who could upgrade it and move kids out of the escrow (see above).${
@@ -127,7 +127,7 @@ export function AboutView() {
               {cost
                 ? `: right now about ${formatEth(cost.fee)} for one kid, plus about ${formatEth((CLAIM_GAS_EXTRA * BigInt(cost.gasPrice)).toString())} for each extra kid in the same claim.`
                 : ': about 79,000 gas for one kid, plus about 30,000 for each extra kid in the same claim.'}{' '}
-              The prover pays for the proof.
+              Proving adds about 0.33 PROVE plus about 0.002 ETH to submit it, the same for 1 kid or 50.
               {/* COPY: FAQ cost */}
             </p>
           </details>
@@ -246,6 +246,8 @@ function TrustList({ facts, failed }: { facts: TrustFacts | undefined; failed: b
     failed || facts ? `Couldn't check who can change ${what} just now.` : `Checking who can change ${what}…`
   const escrow = facts?.escrow
   const collection = facts?.collection
+  // one line instead of two near-identical caveats when the same key holds both
+  const sharedAdmin = escrow?.admin && collection?.admin === escrow.admin ? escrow.admin : null
   return (
     <>
       <ul className="trust">
@@ -256,6 +258,13 @@ function TrustList({ facts, failed }: { facts: TrustFacts | undefined; failed: b
         {hub.escrow &&
           (escrow === undefined ? (
             <Fact tone="unknown">{unknown('the escrow')}</Fact>
+          ) : sharedAdmin ? (
+            <Fact tone="caveat">
+              <b>The {collectionName} contract and {test ? 'this test escrow' : 'the escrow'} share an admin</b> (
+              <Admin address={sharedAdmin} />) who can upgrade either one. An upgrade could move kids out of the escrow or
+              change where kids that haven't crossed yet end up. The bridge can't stop that.
+              {/* COPY: trust, shared admin */}
+            </Fact>
           ) : escrow?.admin ? (
             <Fact tone="caveat">
               <b>{test ? 'This test escrow has an admin' : 'The escrow has an admin'}</b> (<Admin address={escrow.admin} />) who
@@ -272,7 +281,7 @@ function TrustList({ facts, failed }: { facts: TrustFacts | undefined; failed: b
           <Fact tone="unknown">{unknown("the escrow's emergency unlock authority")}</Fact>
         ) : facts.emergencyAdmin ? (
           <Fact tone="caveat"><b>The escrow has an emergency-unlock admin.</b> <Admin address={facts.emergencyAdmin} /> can
-            return deposited kids, including kids already proven on Ethereum. Sending is disabled until this power is renounced.</Fact>
+            return deposited kids, including kids already proven on Ethereum.</Fact>
         ) : (
           <Fact><b>Emergency unlock is renounced.</b> The escrow's internal admin can no longer release deposited kids.</Fact>
         ))}
@@ -297,7 +306,7 @@ function TrustList({ facts, failed }: { facts: TrustFacts | undefined; failed: b
             </Fact>
           </>
         )}
-        {collection === undefined ? (
+        {sharedAdmin ? null : collection === undefined ? (
           <Fact tone="unknown">{unknown(`the ${collectionName} contract`)}</Fact>
         ) : collection.admin ? (
           <Fact tone="caveat">

@@ -97,7 +97,7 @@ const COPY: Readonly<Record<BridgeErrorCode, CopyFn>> = {
   FeeTooHigh: ({ action }) => ({
     title: 'That fee looks wrong',
     body: action === 'prove'
-      ? 'The prover quoted more than the 0.34 PROVE limit. No paid request was sent. Try again later.'
+      ? 'The prover quoted more than the 1 PROVE limit. No paid request was sent. Try again later.'
       : 'The Hub quoted far more than a send should cost, so we stopped before your wallet opened. Nothing was sent. Try again in a bit.',
   }),
   FeeTooLow: () => ({

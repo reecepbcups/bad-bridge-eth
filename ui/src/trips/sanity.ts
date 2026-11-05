@@ -37,9 +37,10 @@ export async function readSendSanity(deployment: Deployment, hub: HubReader, eth
   for (const reason of ['frozen', 'expired', 'retired'] as const) {
     if (safety[reason]) problems.push(withMessage({ code: 'ClientUnavailable', reason }))
   }
-  if (info.admin) problems.push(withMessage({ code: 'EscrowAdmin', power: 'upgrade', admin: info.admin }))
-  if (admin) problems.push(withMessage({ code: 'EscrowAdmin', power: 'emergency unlock', admin }))
-  return { ok: problems.length === 0, status: problems.length ? 'mismatch' : 'ok', problems }
+  const warnings: ConfigProblem[] = []
+  if (info.admin) warnings.push(withMessage({ code: 'EscrowAdmin', power: 'upgrade', admin: info.admin }))
+  if (admin) warnings.push(withMessage({ code: 'EscrowAdmin', power: 'emergency unlock', admin }))
+  return { ok: problems.length === 0, status: problems.length ? 'mismatch' : 'ok', problems, warnings }
 }
 
 /**
@@ -96,7 +97,7 @@ export function describeConfigProblem(problem: ConfigProblem): string {
     case 'ClientUnavailable':
       return `The bridge's pinned light client is ${problem.reason}. Sending is disabled because new deposits could be stranded.`
     case 'EscrowAdmin':
-      return `The escrow still has an ${problem.power} admin (${problem.admin}). Sending is disabled until that authority is removed.`
+      return `The escrow still has an ${problem.power} admin (${problem.admin}). It could move kids that are still in the escrow.`
     case 'NotLive':
       return "This collection's bridge isn't live yet: the Hub escrow or the Ethereum bridge hasn't been deployed."
     case 'EscrowCollection':

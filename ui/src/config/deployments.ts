@@ -1,6 +1,6 @@
 import type { Address } from 'viem'
 
-export type DeploymentId = 'reece-test' | 'badkids' | 'demo'
+export type DeploymentId = 'reece-test' | 'badkids-test' | 'badkids' | 'demo'
 
 /** Cosmos Hub side of a deployment. */
 export interface HubConfig {
@@ -68,7 +68,7 @@ export interface Deployment {
   hub: HubConfig
   eth: EthConfig
   explorer: Explorers
-  /** The bridge's source code, linked from About and the stuck-proving note. */
+  /** The bridge's source code, linked from About and the error page. */
   sourceUrl: string
 }
 
@@ -143,6 +143,23 @@ const reeceTest: Deployment = {
   sourceUrl: SOURCE,
 }
 
+const BADKIDS_TEST_BRIDGE: Address = '0x55AeBB496F306B650048151Fe9019D81819C6F47'
+
+/** Test cw721 named Bad Kids, deployed 2026-11-05 to smoke test the escrow with a temporary admin. Kids #1 to #5 minted. */
+const badkidsTest: Deployment = {
+  id: 'badkids-test',
+  collectionName: 'Bad Kids Test',
+  collectionSize: 5,
+  demo: false,
+  hub: hub(
+    'cosmos1s8vzghad3dz6rjvhxg06vme8u5g3txxdsjavm56xkpr93qguvccsfa2qfp',
+    'cosmos1g73tt6vae4x5x5yk7uwlwfckzqml7a6kj0pkp7hns5c743z8weusrjf4s0',
+  ),
+  eth: eth(BADKIDS_TEST_BRIDGE),
+  explorer: explorers(BADKIDS_TEST_BRIDGE),
+  sourceUrl: SOURCE,
+}
+
 /** The real collection. Escrow and bridge don't exist yet, so the app shows "not live yet". */
 const badkids: Deployment = {
   id: 'badkids',
@@ -166,6 +183,7 @@ const demo: Deployment = {
 
 export const DEPLOYMENTS: Readonly<Record<DeploymentId, Deployment>> = {
   'reece-test': reeceTest,
+  'badkids-test': badkidsTest,
   badkids,
   demo,
 }

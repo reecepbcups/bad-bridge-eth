@@ -1,6 +1,6 @@
 // HubReader over REST (LCD) with the CometBFT RPC list as fallback.
 
-import { fromBase64, fromBech32, fromUtf8, toBase64, toHex, toUtf8 } from '@cosmjs/encoding'
+import { fromBase64, fromBech32, fromHex, fromUtf8, toBase64, toHex, toUtf8 } from '@cosmjs/encoding'
 import {
   QueryContractInfoRequest,
   QueryContractInfoResponse,
@@ -31,6 +31,8 @@ const SEARCH_PAGE = 100
 /** 200 × 100 tokens, 50 × 100 txs: far past anything real, and a hard stop if an endpoint pages forever. */
 const MAX_TOKEN_PAGES = 200
 const MAX_SEARCH_PAGES = 50
+/** One activity-log status read gives up trying more endpoints after this. */
+const TX_LOOKUP_MS = 20_000
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -186,6 +188,45 @@ function byHeightDesc(a: SendInfo, b: SendInfo): number {
   return b.height - a.height || a.tokenId - b.tokenId
 }
 
+type Lookup = { found: false } | { found: true; height: number; code: number; log: string }
+
+const NOT_FOUND = /not found/i
+
+/**
+ * One look for a tx by hash: REST, then each RPC node. A "not found" from one endpoint doesn't mean not found
+ * everywhere (indexer lag, pruning), so it keeps trying the rest instead of giving up early; `deadline` (Date.now()
+ * ms) stops it from trying further endpoints once the caller's budget is spent, since each endpoint has its own
+ * timeout and REST+RPC together can otherwise run well past it. Not found anywhere reachable → { found: false }.
+ */
+export async function lookupTx(http: Http, rest: readonly string[], rpc: readonly string[], hash: string, deadline: number): Promise<Lookup> {
+  for (const base of rest) {
+    if (Date.now() > deadline) return { found: false }
+    try {
+      const body = await http.get(`${base}/cosmos/tx/v1beta1/txs/${hash}`)
+      const r = isRecord(body) && isRecord(body.tx_response) ? body.tx_response : null
+      const height = toHeight(r?.height)
+      if (!r || height === null) continue
+      return { found: true, height, code: typeof r.code === 'number' ? r.code : 0, log: typeof r.raw_log === 'string' ? r.raw_log : '' }
+    } catch (e) {
+      // not found here doesn't mean not found on another endpoint; keep going (same for a genuine EndpointError)
+      if (!(e instanceof ChainError && (e.code === 5 || NOT_FOUND.test(e.message)))) continue
+    }
+  }
+  for (const base of rpc) {
+    if (Date.now() > deadline) return { found: false }
+    try {
+      const r = await http.rpc(base, 'tx', { hash: toBase64(fromHex(hash)), prove: false })
+      const height = isRecord(r) ? toHeight(r.height) : null
+      const result = isRecord(r) && isRecord(r.tx_result) ? r.tx_result : null
+      if (height === null || !result) continue
+      return { found: true, height, code: typeof result.code === 'number' ? result.code : 0, log: typeof result.log === 'string' ? result.log : '' }
+    } catch (e) {
+      if (!(e instanceof EndpointError && NOT_FOUND.test(e.message))) continue
+    }
+  }
+  return { found: false }
+}
+
 export function createHubReader(deployment: Deployment, options: TransportOptions = {}): HubReader {
   const hub = deployment.hub
   const t = createTransport(hub, options)
@@ -334,6 +375,15 @@ export function createHubReader(deployment: Deployment, options: TransportOption
       guard(async () => {
         checkAddress(address, 'contract')
         return t.run('contract info', contractInfoCall(address))
+      }),
+
+    txStatus: (hash) =>
+      guard(async () => {
+        if (!/^[0-9A-F]{64}$/.test(hash)) throw new BridgeError('Unknown', `bad Hub tx hash "${hash}"`)
+        const strip = (u: string) => u.replace(/\/+$/, '')
+        const seen = await lookupTx(t.http, hub.rest.map(strip), hub.rpc.map(strip), hash, Date.now() + TX_LOOKUP_MS)
+        if (!seen.found) return 'pending'
+        return seen.code === 0 ? 'confirmed' : 'failed'
       }),
 
     escrowAdmin: () =>

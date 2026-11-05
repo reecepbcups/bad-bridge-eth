@@ -91,7 +91,7 @@ const SELF_PROVING_KEY = (d: Deployment) =>
 /** An attempt without a paid request may expire; paid requests stay recoverable. */
 const SELF_PROVING_TTL_MS = 60 * 60_000
 
-/** A "Prove it yourself" that was started and hasn't finished. Survives a reload. */
+/** A "Prove it" that was started and hasn't finished. Survives a reload. */
 export interface SelfProving {
   /** Prevent an old page's cancelled run from clearing a newer attempt. */
   attemptId?: string
@@ -447,8 +447,8 @@ export function ProveBalanceNote() {
   )
 }
 
-/** A "Prove it yourself" button for one or more kids whose proof hasn't landed yet, batched into one proof and
- * one submitBatch tx. Without a wallet it opens the connect sheet. */
+/** The "Prove it" button for one or more kids whose proof hasn't landed yet, batched into one proof and one
+ * submitBatch tx. It's the only way a kid gets proven. Without a wallet it opens the connect sheet. */
 export function ProveButton({
   ids,
   expectedRecipients,
@@ -530,7 +530,7 @@ function RegisterProgramModal({ open, onClose }: { open: boolean; onClose: () =>
         {/* COPY: register-program modal */}
       </p>
       {register.status === 'success' ? (
-        <p className="hint">Registered. Close this and try "Prove it yourself" again.</p>
+        <p className="hint">Registered. Close this and try "Prove it" again.</p>
       ) : (
         <>
           <button type="button" className="btn eth" disabled={register.status === 'pending'} onClick={() => void register.run()}>

@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { BRIDGE, DEMO, DEMO_ETH, DEMO_OFF, OTHER_HUB, skipAhead, trackErrors } from './support'
+import { BRIDGE, DEMO, DEMO_ETH, DEMO_OFF, OTHER_HUB, trackErrors } from './support'
 
 // My kids: lookups, live rows, claim-all in one tx, share links, the single-kid page and About.
 
@@ -20,14 +20,14 @@ test('look up an address, then claim everything that is ready in one tx', async 
   await expect(row(9254).getByText('ready to claim', { exact: true })).toBeVisible()
   await expect(row(8783).getByText('crossing', { exact: true })).toBeVisible()
   await expect(row(8073)).toHaveCount(0)
-  await expect(row(8783)).toContainText('Sent 22 min ago · Ethereum caught up, now being proven')
+  await expect(row(8783)).toContainText('Sent 22 min ago · Ethereum caught up, waiting for you to prove it')
   await expect(row(9254)).toContainText('Sent Sep 26, 9:12 pm')
 
   // what's happening, in detail
-  await expect(page.locator('[aria-current="step"]')).toContainText('Proving')
+  await expect(page.locator('[aria-current="step"]')).toContainText('Prove it')
 
-  // the proof for #8783 lands: two ready, one tx claims both
-  await skipAhead(page)
+  // someone proves #8783: two ready, one tx claims both
+  await page.evaluate(() => window.badBridgeDemo?.prove([8783]))
   await expect(page.getByText('2 ready', { exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'Claim both' }).click()
   // no Ethereum wallet yet: the sheet asks for one first
@@ -111,25 +111,6 @@ test('a single kid page works for anyone, with its facts and a claim button', as
   await expect(page.getByRole('link', { name: 'Every kid headed there' })).toHaveAttribute('href', /#\/kids\/0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed$/)
   await expect(page.getByRole('button', { name: 'Claim #42' })).toBeVisible()
   await expect(page.getByText('Anyone can claim; it always goes to 0x5aAe…eAed.')).toBeVisible()
-})
-
-test('stuck prover: after 30 minutes proving, explains why the kid is waiting', async ({ page }) => {
-  const start = new Date('2026-09-27T17:00:00Z')
-  await page.clock.setFixedTime(start)
-  await page.goto(`${DEMO}#/kid/8783`)
-  await expect(page.locator('[aria-current="step"]')).toContainText('Proving')
-  // just seen: no clock yet
-  await expect(page.getByText('Seen proving on this device')).toHaveCount(0)
-  await page.clock.setFixedTime(new Date(start.getTime() + 6 * 60_000))
-  await page.evaluate(() => window.badBridgeDemo?.advance(0))
-  // the page's wall clock ticks every 15 seconds
-  await expect(page.getByText('Seen proving on this device since 10:00 am.')).toBeVisible({ timeout: 20_000 })
-  await expect(page.getByText('safe in the escrow')).toHaveCount(0)
-  // this browser first saw it proving at `start`; 31 minutes later it still is
-  await page.clock.setFixedTime(new Date(start.getTime() + 31 * 60_000))
-  await page.evaluate(() => window.badBridgeDemo?.advance(0))
-  await expect(page.getByText('This kid is safe in the escrow and will cross when a prover picks it up.', { exact: false })).toBeVisible()
-  await expect(page.locator('[aria-current="step"]')).toContainText('Proving')
 })
 
 test('About lists the contracts from the deployment, with live health', async ({ page }) => {

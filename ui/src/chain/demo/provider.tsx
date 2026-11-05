@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } fr
 import type { Deployment } from '../../config/deployments'
 import { BridgeContext, type BridgeContextValue } from '../context'
 import type { EthAddress, HubAddress } from '../types'
-import { createDemoEthWriter, createDemoHubWriter, createDemoReaders, createDemoWallet } from './adapter'
+import { createDemoEthWriter, createDemoHubWriter, createDemoProveKidWriter, createDemoReaders, createDemoWallet } from './adapter'
 import { DemoControlsContext, type DemoControls } from './controls'
 import { demoOptionsFromSearch } from './options'
 import { DemoSim, type DemoOptions } from './sim'
@@ -64,11 +64,11 @@ export default function DemoBridgeProvider({
     () => (ethWallet.status === 'connected' && ethWallet.address ? createDemoEthWriter(sim, ethWallet.address) : null),
     [sim, ethWallet],
   )
+  const proveKid = useMemo(() => (ethWriter ? createDemoProveKidWriter(sim) : null), [sim, ethWriter])
 
   const value = useMemo<BridgeContextValue>(
-    // Proving is real-chain only: no Succinct network or SP1 stdin to simulate in the demo sim.
-    () => ({ deployment: active, ...readers, hubWallet, ethWallet, hubWriter, ethWriter, proveKid: null }),
-    [active, readers, hubWallet, ethWallet, hubWriter, ethWriter],
+    () => ({ deployment: active, ...readers, hubWallet, ethWallet, hubWriter, ethWriter, proveKid }),
+    [active, readers, hubWallet, ethWallet, hubWriter, ethWriter, proveKid],
   )
 
   const controls = useMemo<DemoControls>(
@@ -78,7 +78,6 @@ export default function DemoBridgeProvider({
       advance: (ms) => sim.advance(ms),
       setPaused: (on) => sim.setPaused(on),
       setFrozen: (on) => sim.setFrozen(on),
-      setStuck: (on) => sim.setStuck(on),
       setOffline: (on) => sim.setOffline(on),
       setFailNext: (code) => sim.setFailNext(code),
       setWallet: (chain, connected) => sim.setWallet(chain, connected),

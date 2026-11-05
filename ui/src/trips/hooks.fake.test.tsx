@@ -303,69 +303,8 @@ describe('polling', () => {
   })
 })
 
-describe('stuck', () => {
-  const T0 = Date.parse('2026-09-27T17:00:00Z')
-
-  beforeEach(() => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(T0)
-  })
-
-  it('turns on after 30 minutes seen proving, and survives a reload', async () => {
-    const chain = everyStage()
-    const first = fakeBridge(chain)
-    const { result, unmount } = renderHook(() => useTrip(1), { wrapper: first.wrapper })
-    expect(await loaded(result)).toMatchObject({ stage: 'proving', stuck: false, provingSince: new Date(T0) })
-
-    vi.setSystemTime(T0 + 29 * MIN)
-    act(() => result.current.refetch())
-    await waitFor(() => expect(result.current.isFetching).toBe(false))
-    expect(result.current.data?.stuck).toBe(false)
-
-    vi.setSystemTime(T0 + 31 * MIN)
-    act(() => result.current.refetch())
-    await waitFor(() => expect(result.current.data?.stuck).toBe(true))
-    unmount()
-
-    // a reload: fresh cache and memory, same localStorage
-    resetTripStorage()
-    const again = renderHook(() => useTrip(1), { wrapper: fakeBridge(chain).wrapper })
-    expect(await loaded(again.result)).toMatchObject({ stuck: true, provingSince: new Date(T0) })
-  })
-
-  it('starts the clock at first sight on a fresh device', async () => {
-    const { wrapper } = fakeBridge(everyStage())
-    const { result } = renderHook(() => useTrip(1), { wrapper })
-    // the checkpoint passed long ago, but this device has only just seen it
-    expect(await loaded(result)).toMatchObject({ stage: 'proving', stuck: false })
-  })
-
-  it('stops, and forgets the sighting, once the proof lands', async () => {
-    const chain = everyStage()
-    const { wrapper } = fakeBridge(chain)
-    const { result } = renderHook(() => useTrip(1), { wrapper })
-    await loaded(result)
-    vi.setSystemTime(T0 + 45 * MIN)
-    chain.proven.set(1, ALICE)
-    act(() => result.current.refetch())
-    await waitFor(() => expect(result.current.data?.stage).toBe('ready'))
-    expect(result.current.data).toMatchObject({ stuck: false })
-    expect(result.current.data?.provingSince).toBeUndefined()
-    expect(localStorage.getItem(`bad-bridge:proving:${LIVE_ID}`)).toBe('{}')
-  })
-
-  it('is never set while the client is frozen (the paused banner explains it)', async () => {
-    const chain = everyStage()
-    chain.client.frozen = true
-    localStorage.setItem(`bad-bridge:proving:${LIVE_ID}`, JSON.stringify({ 1: T0 - 60 * MIN }))
-    const { wrapper } = fakeBridge(chain)
-    const { result } = renderHook(() => useTrip(1), { wrapper })
-    expect(await loaded(result)).toMatchObject({ stage: 'proving', stuck: false })
-  })
-})
-
 describe('without localStorage', () => {
-  it('sends, remembers for this tab, and tracks stuck in memory', async () => {
+  it('sends and remembers for this tab', async () => {
     const restore = breakLocalStorage()
     try {
       const chain = everyStage()
@@ -375,7 +314,7 @@ describe('without localStorage', () => {
       const { result } = renderHook(() => ({ send: useSendKids(), remembered: useRememberedTrips(), trip: useTrip(1) }), { wrapper })
       await act(() => result.current.send.run([10], ALICE))
       expect(result.current.remembered).toEqual([10])
-      await waitFor(() => expect(result.current.trip.data?.provingSince).toBeInstanceOf(Date))
+      await waitFor(() => expect(result.current.trip.data?.stage).toBe('proving'))
     } finally {
       restore()
     }
@@ -386,7 +325,7 @@ describe('useConfigSanity', () => {
   it('passes when both contracts match', async () => {
     const { wrapper } = fakeBridge()
     const { result } = renderHook(() => useConfigSanity(), { wrapper })
-    expect(await loaded(result)).toEqual({ ok: true, status: 'ok', problems: [] })
+    expect(await loaded(result)).toEqual({ ok: true, status: 'ok', problems: [], warnings: [] })
   })
 
   it('lists mismatches in plain words', async () => {
@@ -780,16 +719,25 @@ describe('useSendKids: fresh light client check', () => {
     expect(hubWriter.send).not.toHaveBeenCalled()
   })
 
-  it.each(['upgrade', 'unlock', 'unreadable'] as const)('blocks a send when escrow authority is %s', async (power) => {
+  it('blocks a send when escrow authority is unreadable', async () => {
     const chain = fakeChain()
-    if (power === 'upgrade') chain.contracts.set(LIVE.hub.escrow!, { codeId: 750, admin: HUB_A })
-    if (power === 'unlock') chain.emergencyAdmin = HUB_A
-    if (power === 'unreadable') chain.fail.escrowAdmin = networkError()
+    chain.fail.escrowAdmin = networkError()
     const hubWriter = fakeHubWriter(chain, HUB_A)
     const { wrapper } = fakeBridge(chain, { hubWriter })
     const { result } = renderHook(() => useSendKids(), { wrapper })
     await act(() => expect(result.current.run([1], ALICE)).rejects.toBeInstanceOf(BridgeError))
     expect(hubWriter.send).not.toHaveBeenCalled()
+  })
+  // admins are flagged, not blocking, so the UI can be tested before they're removed
+  it.each(['upgrade', 'unlock'] as const)('still sends when the escrow has an %s admin', async (power) => {
+    const chain = fakeChain()
+    if (power === 'upgrade') chain.contracts.set(LIVE.hub.escrow!, { codeId: 750, admin: HUB_A })
+    if (power === 'unlock') chain.emergencyAdmin = HUB_A
+    const hubWriter = fakeHubWriter(chain, HUB_A)
+    const { wrapper } = fakeBridge(chain, { hubWriter })
+    const { result } = renderHook(() => useSendKids(), { wrapper })
+    await act(() => result.current.run([1], ALICE))
+    expect(hubWriter.send).toHaveBeenCalled()
   })
   it('refuses when the client froze after health was read, and never touches the wallet', async () => {
     const chain = fakeChain()

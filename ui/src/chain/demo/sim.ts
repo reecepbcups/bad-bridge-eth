@@ -17,8 +17,8 @@ import {
 } from '../types'
 import * as seed from './seed'
 
-// An in-memory Hub + Ethereum + prover on a virtual clock. Sends walk through the real stages:
-// record written at the current Hub height, the light client catches up past it, the proof lands,
+// An in-memory Hub + Ethereum on a virtual clock. Sends walk through the real stages:
+// record written at the current Hub height, the light client catches up past it, someone proves it,
 // then the kid can be claimed. Everything is synchronous here; adapter.ts adds latency and async.
 
 const BLOCK_MS = 6_000
@@ -27,7 +27,7 @@ const MIN = 60_000
 export interface DemoTimeline {
   /** Send landed → Ethereum's client passes Hs (virtual time). */
   catchUpMs: number
-  /** Client passed Hs → proof lands (virtual time). */
+  /** Prove clicked → proof made (real time). */
   proveMs: number
   /** Background Eureka relays, so the lag stays realistic in a long session (virtual time). */
   relayEveryMs: number
@@ -41,7 +41,7 @@ export interface DemoTimeline {
 
 export const DEFAULT_TIMELINE: DemoTimeline = {
   catchUpMs: 5_000,
-  proveMs: 5_000,
+  proveMs: 3_000,
   relayEveryMs: 15 * MIN,
   walletMs: 600,
   signMs: 1_200,
@@ -49,7 +49,7 @@ export const DEFAULT_TIMELINE: DemoTimeline = {
 }
 
 /** All real-time delays off, for unit tests and e2e. */
-export const INSTANT: Partial<DemoTimeline> = { walletMs: 0, signMs: 0, latencyMs: 0 }
+export const INSTANT: Partial<DemoTimeline> = { walletMs: 0, signMs: 0, latencyMs: 0, proveMs: 0 }
 
 export interface DemoOptions {
   timeline?: Partial<DemoTimeline>
@@ -84,13 +84,11 @@ export interface DemoSnapshot {
   paused: boolean
   /** Light client frozen: no relays, no proofs. Claims still work. */
   frozen: boolean
-  /** Prover stuck: relays happen, proofs don't. */
-  stuck: boolean
   /** Every read fails with Network. */
   offline: boolean
   /** The next write that can fail this way will, once. */
   failNext: BridgeErrorCode | null
-  /** Trip events still to come (relays and proofs for sent kids). skip() jumps to the next. */
+  /** Trip events still to come (relays for sent kids). skip() jumps to the next. */
   pending: number
   hubWallet: DemoWallet
   ethWallet: DemoWallet
@@ -98,7 +96,7 @@ export interface DemoSnapshot {
   ethWrongChain: boolean
 }
 
-type EventKind = 'relay' | 'prove' | 'background'
+type EventKind = 'relay' | 'background'
 interface SimEvent {
   at: number
   kind: EventKind
@@ -125,7 +123,6 @@ export class DemoSim {
   private clientHeight = seed.EPOCH_CLIENT_HEIGHT
   private paused = false
   private frozen = false
-  private stuck = false
   private offline = false
   private failNext: BridgeErrorCode | null = null
   /** A blocked event that finally applies counts from here, not from when it was due. */
@@ -191,10 +188,10 @@ export class DemoSim {
     this.emit()
   }
 
-  /** Jumps to the next relay or proof for a sent kid. False if nothing can happen (none left, or stuck/frozen). */
+  /** Jumps to the next relay for a sent kid. False if nothing can happen (none left, or frozen). */
   skip(): boolean {
     const next = this.events
-      .filter((e) => e.kind !== 'background' && !this.blocked(e))
+      .filter((e) => e.kind !== 'background' && !this.frozen)
       .sort((a, b) => a.at - b.at)[0]
     if (!next) return false
     this.now = Math.max(this.now, next.at)
@@ -213,13 +210,6 @@ export class DemoSim {
   setFrozen(on: boolean): void {
     if (this.frozen && !on) this.unblockedAt = this.now
     this.frozen = on
-    this.process()
-    this.emit()
-  }
-
-  setStuck(on: boolean): void {
-    if (this.stuck && !on) this.unblockedAt = this.now
-    this.stuck = on
     this.process()
     this.emit()
   }
@@ -365,6 +355,23 @@ export class DemoSim {
     return { txHash, height }
   }
 
+  /** Proves every kid in `ids` the client has passed, like a submitBatch. Returns the ones it proved. */
+  prove(ids: readonly KidId[]): KidId[] {
+    this.takeFailure('sign')
+    if (this.ethWrongChain) throw new BridgeError('WrongChain', 'demo: the Ethereum wallet is on another network')
+    if (this.frozen) throw new BridgeError('ClientFrozen', 'demo: the light client is frozen')
+    const proved = ids.filter((id) => {
+      const recipient = this.records.get(id)
+      const sent = this.sends.get(id)
+      return recipient && sent && sent.height < this.clientHeight && !this.proven.has(id)
+    })
+    if (proved.length === 0) throw new BridgeError('Unknown', 'demo: nothing to prove yet')
+    for (const id of proved) this.proven.set(id, this.records.get(id)!)
+    this.txCount++
+    this.emit()
+    return proved
+  }
+
   /** Mints every proven, unminted kid in `ids`, like Multicall3 aggregate3 with allowFailure. */
   claim(ids: readonly KidId[]): ClaimResult {
     this.takeFailure('claim')
@@ -400,7 +407,6 @@ export class DemoSim {
     this.clientHeight = seed.EPOCH_CLIENT_HEIGHT
     this.paused = this.options.paused ?? false
     this.frozen = false
-    this.stuck = false
     this.offline = false
     this.failNext = null
     this.unblockedAt = seed.EPOCH
@@ -426,7 +432,6 @@ export class DemoSim {
       })
       if (t.proven) this.proven.set(t.id, t.recipient)
       if (t.minted) this.ethOwners.set(t.id, t.recipient)
-      if (t.provesInMs !== undefined) this.events.push({ at: seed.EPOCH + t.provesInMs, kind: 'prove', ids: [t.id] })
     }
     // the last relay was 10 minutes before EPOCH
     this.events.push({ at: seed.EPOCH + Math.max(1_000, this.timeline.relayEveryMs - 10 * MIN), kind: 'background', ids: [] })
@@ -446,16 +451,12 @@ export class DemoSim {
     this.emit()
   }
 
-  private blocked(e: SimEvent): boolean {
-    return this.frozen || (e.kind === 'prove' && this.stuck)
-  }
-
   /** Applies every due, unblocked event in time order. Returns whether anything changed. */
   private process(): boolean {
     let applied = false
     for (;;) {
       const due = this.events
-        .filter((e) => e.at <= this.now && !this.blocked(e))
+        .filter((e) => e.at <= this.now && !this.frozen)
         .sort((a, b) => a.at - b.at)[0]
       if (!due) return applied
       this.events.splice(this.events.indexOf(due), 1)
@@ -473,14 +474,6 @@ export class DemoSim {
         break
       case 'relay':
         this.clientHeight = Math.max(this.clientHeight, height)
-        this.events.push({ at: at + this.timeline.proveMs, kind: 'prove', ids: e.ids })
-        break
-      case 'prove':
-        for (const id of e.ids) {
-          const recipient = this.records.get(id)
-          const sent = this.sends.get(id)
-          if (recipient && sent && sent.height < this.clientHeight && !this.proven.has(id)) this.proven.set(id, recipient)
-        }
         break
     }
   }
@@ -512,7 +505,6 @@ export class DemoSim {
       clientHeight: this.clientHeight,
       paused: this.paused,
       frozen: this.frozen,
-      stuck: this.stuck,
       offline: this.offline,
       failNext: this.failNext,
       pending: this.events.filter((e) => e.kind !== 'background').length,

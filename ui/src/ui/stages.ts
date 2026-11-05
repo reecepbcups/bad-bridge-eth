@@ -25,7 +25,7 @@ export const STAGE_LINE: Readonly<Record<Stage, string>> = {
   locked: 'Sent, in the Hub escrow',
   'catching-up': 'Waiting for Ethereum to catch up',
   crossing: 'On the bridge',
-  proving: 'Ethereum caught up, now being proven',
+  proving: 'Ethereum caught up, waiting for you to prove it',
   ready: 'Proven, ready to claim',
   'home-eth': 'Home on Ethereum',
 }

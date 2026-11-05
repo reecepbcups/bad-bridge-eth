@@ -26,7 +26,7 @@ interface DemoSimHandle {
   skip(): boolean
   advance(ms: number): void
   setFrozen(on: boolean): void
-  setStuck(on: boolean): void
+  prove(ids: readonly number[]): unknown
   setOffline(on: boolean): void
   setFailNext(code: string | null): void
   setWrongChain(on: boolean): void
@@ -82,9 +82,14 @@ export async function dismissToasts(page: Page): Promise<void> {
   while (await x.count() > 0) await x.click()
 }
 
-/** The demo toolbar's "skip ahead": jumps to the next relay or proof. */
+/** The demo toolbar's "skip ahead": jumps to the next relay. */
 export async function skipAhead(page: Page): Promise<void> {
   await page.getByRole('navigation', { name: 'Demo controls' }).getByRole('button', { name: 'skip ahead' }).click()
+}
+
+/** Proves these kids straight in the sim, like someone else clicked "Prove it". */
+export async function proveInSim(page: Page, ids: readonly number[]): Promise<void> {
+  await page.evaluate((ids) => window.badBridgeDemo?.prove(ids), ids)
 }
 
 /** From a connected pick screen: pick these kids and go to review. */

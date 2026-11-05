@@ -5,6 +5,7 @@ import {
   waitForTransactionReceipt,
   writeContract,
 } from 'viem/actions'
+import { recordActivity, type ActivityEntry } from '../../activity/storage'
 import type { Deployment } from '../../config/deployments'
 import {
   BridgeError,
@@ -77,6 +78,8 @@ export interface EthWriterWithBatch extends EthWriter {
       onProgress?: (progress: ProofRequestProgress) => void
       confirmQuote?: (quote: ProofQuote) => Promise<boolean>
       onRequestSubmitting?: () => void
+      /** Kids the proof is for, so the activity log can name them. */
+      kids?: readonly KidId[]
     },
   ): Promise<DecodedGroth16Proof>
   /**
@@ -138,6 +141,7 @@ export function createEthWriter(deps: EthWriterDeps): EthWriterWithBatch {
   const address = 'walletClient' in deps ? deps.walletClient.account.address : deps.address
   const getWallet = 'walletClient' in deps ? () => Promise.resolve(deps.walletClient) : deps.getWalletClient
   const chain = ethChain(deployment)
+  const log = (entry: ActivityEntry) => recordActivity(deployment.id, entry)
 
   async function claimOne(wallet: SignerClient, bridge: Address, id: KidId, report: Report): Promise<Hex> {
     const { request } = await simulateContract(publicClient, {
@@ -148,7 +152,9 @@ export function createEthWriter(deps: EthWriterDeps): EthWriterWithBatch {
       args: [id],
     })
     report('signing')
-    return writeContract(wallet, { ...request, account: wallet.account, chain })
+    const hash = await writeContract(wallet, { ...request, account: wallet.account, chain })
+    log({ action: 'claim', hash, kids: [id] })
+    return hash
   }
 
   async function submitBatchTx(
@@ -158,6 +164,7 @@ export function createEthWriter(deps: EthWriterDeps): EthWriterWithBatch {
     cs: ConsensusStateArgs,
     sp1Proof: Sp1ProofArgs,
     report: BatchReport,
+    kidIds: readonly KidId[] | undefined,
   ): Promise<Hex> {
     const { request } = await simulateContract(publicClient, {
       account: wallet.account,
@@ -167,7 +174,9 @@ export function createEthWriter(deps: EthWriterDeps): EthWriterWithBatch {
       args: [proofHeight, cs, sp1Proof],
     })
     report('signing')
-    return writeContract(wallet, { ...request, account: wallet.account, chain })
+    const hash = await writeContract(wallet, { ...request, account: wallet.account, chain })
+    log({ action: 'submit-proof', hash, kids: kidIds && [...kidIds] })
+    return hash
   }
 
   async function claimMany(
@@ -186,6 +195,7 @@ export function createEthWriter(deps: EthWriterDeps): EthWriterWithBatch {
     })
     report('signing')
     const hash = await writeContract(wallet, { ...request, account: wallet.account, chain })
+    log({ action: 'claim', hash, kids: [...ids] })
     return { hash, claimed: [...ids] }
   }
 
@@ -223,7 +233,13 @@ export function createEthWriter(deps: EthWriterDeps): EthWriterWithBatch {
     return { txHash: receipt.transactionHash, claimed }
   }
 
-  async function submitBatch(proofHeight: bigint, cs: ConsensusStateArgs, sp1Proof: Sp1ProofArgs, report: BatchReport): Promise<SubmitBatchResult> {
+  async function submitBatch(
+    proofHeight: bigint,
+    cs: ConsensusStateArgs,
+    sp1Proof: Sp1ProofArgs,
+    report: BatchReport,
+    kidIds: readonly KidId[] | undefined,
+  ): Promise<SubmitBatchResult> {
     const bridge = requireBridge(deployment)
     const wallet = await getWallet()
     const walletChain = await getChainId(wallet)
@@ -231,7 +247,7 @@ export function createEthWriter(deps: EthWriterDeps): EthWriterWithBatch {
       throw new BridgeError('WrongChain', `wallet is on chain ${walletChain}, the bridge is on ${chain.name} (${chain.id})`)
     }
 
-    const hash = await submitBatchTx(wallet, bridge, proofHeight, cs, sp1Proof, report)
+    const hash = await submitBatchTx(wallet, bridge, proofHeight, cs, sp1Proof, report, kidIds)
     report('confirming')
     let cancelled = false
     const receipt = await waitForTransactionReceipt(publicClient, {
@@ -253,9 +269,11 @@ export function createEthWriter(deps: EthWriterDeps): EthWriterWithBatch {
     onProgress: ((progress: ProofRequestProgress) => void) | undefined,
     confirmQuote: ((quote: ProofQuote) => Promise<boolean>) | undefined,
     onRequestSubmitting: (() => void) | undefined,
+    kidIds: readonly KidId[] | undefined,
   ): Promise<DecodedGroth16Proof> {
     const wallet = await getWallet()
-    return requestGroth16ProofImpl({ wallet, vkHash, stdinBytes, onStage, onProgress, confirmQuote, onRequestSubmitting })
+    const onSigned = (requestId: Hex | undefined) => log({ action: 'sign-proof-request', requestId, kids: kidIds && [...kidIds] })
+    return requestGroth16ProofImpl({ wallet, vkHash, stdinBytes, onStage, onProgress, confirmQuote, onRequestSubmitting, onSigned })
   }
 
   async function registerProgram(vkHash: Hex, vk: Uint8Array, elf: Uint8Array): Promise<void> {
@@ -278,7 +296,7 @@ export function createEthWriter(deps: EthWriterDeps): EthWriterWithBatch {
     submitBatch: async (proofHeight, cs, sp1Proof, options) => {
       const stage = stageReporter(options?.onStage)
       try {
-        return await submitBatch(proofHeight, cs, sp1Proof, stage.report)
+        return await submitBatch(proofHeight, cs, sp1Proof, stage.report, options?.kids)
       } catch (e) {
         throw toEthError(e)
       } finally {
@@ -287,7 +305,7 @@ export function createEthWriter(deps: EthWriterDeps): EthWriterWithBatch {
     },
     requestGroth16Proof: async (vkHash, stdinBytes, options) => {
       try {
-        return await requestGroth16Proof(vkHash, stdinBytes, options?.onStage, options?.onProgress, options?.confirmQuote, options?.onRequestSubmitting)
+        return await requestGroth16Proof(vkHash, stdinBytes, options?.onStage, options?.onProgress, options?.confirmQuote, options?.onRequestSubmitting, options?.kids)
       } catch (e) {
         throw toEthError(e)
       }
@@ -323,7 +341,7 @@ export function createEthWriter(deps: EthWriterDeps): EthWriterWithBatch {
     swapEthForProve: async (prove, options) => {
       const stage = stageReporter(options?.onStage)
       try {
-        return await swapEthForProveImpl(publicClient, await getWallet(), chain.id, prove, stage.report)
+        return await swapEthForProveImpl(publicClient, await getWallet(), chain.id, prove, stage.report, log)
       } catch (e) {
         throw toEthError(e)
       } finally {
@@ -333,7 +351,7 @@ export function createEthWriter(deps: EthWriterDeps): EthWriterWithBatch {
     depositProve: async (amount, options) => {
       const stage = stageReporter(options?.onStage)
       try {
-        return await depositProveImpl(publicClient, await getWallet(), chain.id, amount, stage.report)
+        return await depositProveImpl(publicClient, await getWallet(), chain.id, amount, stage.report, log)
       } catch (e) {
         throw toEthError(e)
       } finally {

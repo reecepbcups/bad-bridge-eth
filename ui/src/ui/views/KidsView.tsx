@@ -75,10 +75,6 @@ export function KidsView({ address, mode }: { address?: string; mode: KidsMode }
   // the group moves at its slowest kid's pace
   const groupStage = slowestStage(crossingTrips)
   const lead = crossingTrips.find((t) => t.stage === groupStage)
-  const groupFacts = lead && {
-    ...lead,
-    stuck: crossingTrips.some((t) => t.stuck && t.stage === lead.stage),
-  }
   // Nudging only helps until Ethereum's light client has caught up. Past `proving` it's already caught up.
   const nudgeHelps = crossingTrips.some((t) => t.stage !== 'proving')
   const provingTrips = list.filter((t) => t.stage === 'proving')
@@ -173,13 +169,12 @@ export function KidsView({ address, mode }: { address?: string; mode: KidsMode }
         </p>
       )}
 
-      {crossingView && groupFacts && crossingRecipient && (
+      {crossingView && lead && crossingRecipient && (
         <>
-          <Scene ids={crossingTrips.map((t) => t.tokenId)} stage={groupFacts.stage} />
+          <Scene ids={crossingTrips.map((t) => t.tokenId)} stage={lead.stage} />
           <StageList
-            facts={groupFacts}
+            facts={lead}
             health={health.data}
-            kids={crossing}
             speedUp={nudgeHelps && <SpeedUp recipient={crossingRecipient} n={crossing} />}
           />
           {health.data && (
@@ -206,7 +201,7 @@ export function KidsView({ address, mode }: { address?: string; mode: KidsMode }
                     : `Claim all ${ready.length}`}
               </ClaimButton>
             )}
-            {!deployment.demo && provingTrips.length > 1 && (
+            {provingTrips.length > 1 && (
               <ProveButton ids={provingTrips.map((t) => t.tokenId)} expectedRecipients={provingRecipients} flow={prove}>
                 {/* one proof covers the whole batch, at close to the cost of proving just one */}
                 {provingTrips.length === 2 ? 'Prove both' : `Prove all ${provingTrips.length}`}
@@ -366,7 +361,7 @@ export function TripRow({
   const pill = STAGE_PILL[trip.stage]
   const token = trip.stage === 'home-eth' ? deployment.explorer.ethToken(trip.tokenId) : null
   const sent = trip.sentAt ? `Sent ${sentWhen(trip.sentAt, hubNow)}` : null
-  const line = [sent, STAGE_LINE[trip.stage], trip.stuck ? 'waiting for a prover' : null].filter(Boolean).join(' · ')
+  const line = [sent, STAGE_LINE[trip.stage]].filter(Boolean).join(' · ')
   return (
     <li className="item">
       <KidArt id={trip.tokenId} size={72} decorative />
@@ -382,13 +377,13 @@ export function TripRow({
             Claim
           </ClaimButton>
         )}
-        {!deployment.demo && trip.stage === 'proving' && (
+        {trip.stage === 'proving' && (
           <ProveButton
             ids={[trip.tokenId]}
             expectedRecipients={trip.recipient ? new Map([[trip.tokenId, trip.recipient]]) : undefined}
             flow={prove}
           >
-            Prove it yourself
+            Prove it
           </ProveButton>
         )}
         {token && (

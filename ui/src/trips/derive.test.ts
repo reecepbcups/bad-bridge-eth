@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { ClientStatus, EscrowRecord, KidEthStatus } from '../chain/types'
-import { blocksToGo, buildTrip, compareTrips, deriveStage, isStuck, STUCK_AFTER_MS, type StageInput, type TripInput } from './derive'
+import { blocksToGo, buildTrip, compareTrips, deriveStage, type StageInput, type TripInput } from './derive'
 import type { Stage, Trip } from './types'
 
 const ALICE = '0x00000000000000000000000000000000000A11CE'
@@ -52,7 +52,6 @@ describe('deriveStage', () => {
 })
 
 describe('buildTrip', () => {
-  const now = new Date('2026-09-27T17:00:00Z')
   const base: TripInput = {
     tokenId: 7,
     record,
@@ -60,9 +59,7 @@ describe('buildTrip', () => {
     sentAt: new Date('2026-09-27T16:00:00Z'),
     client: client(HS + 1),
     eth: nothingOnEth,
-    now,
   }
-  const ago = (ms: number) => new Date(now.getTime() - ms)
 
   it('fills the send facts', () => {
     expect(buildTrip(base)).toEqual({
@@ -73,7 +70,6 @@ describe('buildTrip', () => {
       sendHeight: HS,
       sender: 'cosmos1sender',
       sentAt: base.sentAt,
-      stuck: false,
     })
   })
 
@@ -104,20 +100,6 @@ describe('buildTrip', () => {
   it('has no recipient while home', () => {
     expect(buildTrip({ ...base, record: null, send: null })).toMatchObject({ stage: 'home-hub', recipient: null })
   })
-
-  it('is stuck once seen proving for more than 30 minutes', () => {
-    expect(buildTrip({ ...base, provingSince: ago(STUCK_AFTER_MS + 1) })).toMatchObject({ stuck: true, provingSince: ago(STUCK_AFTER_MS + 1) })
-    expect(buildTrip({ ...base, provingSince: ago(STUCK_AFTER_MS) }).stuck).toBe(false)
-    expect(buildTrip({ ...base, provingSince: null }).stuck).toBe(false)
-  })
-
-  it('is never stuck outside proving, or while the client is frozen', () => {
-    const long = ago(2 * STUCK_AFTER_MS)
-    expect(buildTrip({ ...base, provingSince: long, client: client(HS) })).toMatchObject({ stage: 'catching-up', stuck: false })
-    expect(buildTrip({ ...base, provingSince: long, eth: eth(ALICE) })).toMatchObject({ stage: 'ready', stuck: false })
-    expect(buildTrip({ ...base, provingSince: long, client: client(HS + 1, true) })).toMatchObject({ stage: 'proving', stuck: false })
-    expect(buildTrip({ ...base, provingSince: long, eth: eth(ALICE) }).provingSince).toBeUndefined()
-  })
 })
 
 describe('blocksToGo', () => {
@@ -129,20 +111,8 @@ describe('blocksToGo', () => {
   })
 })
 
-describe('isStuck', () => {
-  const now = new Date('2026-09-27T17:00:00Z')
-  const ago = (ms: number) => new Date(now.getTime() - ms)
-
-  it('only while proving, and only past the threshold', () => {
-    expect(isStuck('proving', ago(STUCK_AFTER_MS + 1), now)).toBe(true)
-    expect(isStuck('proving', ago(STUCK_AFTER_MS - 1), now)).toBe(false)
-    expect(isStuck('catching-up', ago(2 * STUCK_AFTER_MS), now)).toBe(false)
-    expect(isStuck('proving', null, now)).toBe(false)
-  })
-})
-
 describe('compareTrips', () => {
-  const trip = (tokenId: number, stage: Stage, sendHeight?: number): Trip => ({ tokenId, stage, recipient: ALICE, stuck: false, sendHeight })
+  const trip = (tokenId: number, stage: Stage, sendHeight?: number): Trip => ({ tokenId, stage, recipient: ALICE, sendHeight })
 
   it('puts ready first, then in flight, then home; newest first within each', () => {
     const trips = [

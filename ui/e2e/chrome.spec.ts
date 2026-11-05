@@ -34,7 +34,7 @@ for (const width of [375, 330]) {
     await page.setViewportSize({ width, height: 800 })
     await page.goto(`${DEMO}#/`)
     const tabs = page.getByRole('navigation', { name: 'Sections' }).getByRole('link')
-    await expect(tabs).toHaveCount(4)
+    await expect(tabs).toHaveCount(5)
     await expect(tabs.nth(1)).toContainText('2') // with the badge, the widest it gets
     await page.evaluate(() => document.fonts.ready)
     const boxes = await tabs.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().toJSON() as DOMRect))

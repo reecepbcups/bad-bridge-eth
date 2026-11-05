@@ -1,0 +1,14 @@
+/* Activity: one row per thing signed, wrapping on phones. */
+.activity { list-style: none; margin: 0; padding: 0; display: grid; }
+.activity-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding-block: 12px; border-top: 2px dashed var(--line); }
+.activity-row:first-child { border-top: 0; }
+.activity-row .when { font-size: 13px; color: var(--ink-soft); min-width: 120px; }
+.activity-row .where { font: 700 12px/1 var(--body); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-soft); }
+.activity-row .where.hub { color: var(--hub-ink); }
+.activity-row .where.eth { color: var(--eth-ink); }
+.activity-row .kids { font-size: 13.5px; color: var(--ink-soft); overflow-wrap: anywhere; }
+.activity-row .status { margin-left: auto; font-size: 15px; }
+.activity-row .status.confirmed { color: var(--ok-ink); border-color: var(--ok); }
+.activity-row .status.failed { color: var(--crayon-ink); border-color: var(--crayon); }
+.activity-row .status.pending { background: var(--sun); color: var(--sun-ink); }
+.activity-row .status.unknown, .activity-row .status.checking { color: var(--ink-soft); border-color: var(--line); }
