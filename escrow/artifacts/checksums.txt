@@ -1,1 +1,1 @@
-b656826c8e03dd1f981fe44f38dd3034278324099630839bd288a91927bfbb54  bad_bridge_escrow.wasm
+6e32b99ee22cdbc3d2814c9dc2ca1dd7924a21e1f3ee9c25ff66c80b6a7183e2  bad_bridge_escrow.wasm
