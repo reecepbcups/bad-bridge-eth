@@ -288,8 +288,8 @@ function TrustList({ facts, failed }: { facts: TrustFacts | undefined; failed: b
         {eth.bridge && (
           <>
             <Fact>
-              <b>The Ethereum bridge cannot be upgraded.</b> Its owner can change royalty settings and contract metadata,
-              but cannot mint a kid without a proof or change the pinned light client.
+              <b>The Ethereum bridge has no owner or admin.</b> Nobody can upgrade it, change its settings or metadata,
+              mint a kid without a proof or change the pinned light client.
               {/* COPY: trust, BadBridge */}
             </Fact>
             <Fact tone="caveat">

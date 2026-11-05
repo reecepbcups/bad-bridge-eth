@@ -70,7 +70,7 @@ describe('AboutView trust facts', () => {
     expect(await screen.findByText('The escrow has no upgrade admin.')).toBeInTheDocument()
     expect(screen.getByText('The escrow has an emergency-unlock admin.')).toBeInTheDocument()
     expect(screen.queryByText('Emergency unlock is renounced.')).not.toBeInTheDocument()
-    expect(screen.queryByText('BadBridge has no owner.')).not.toBeInTheDocument()
+    expect(screen.getByText('The Ethereum bridge has no owner or admin.')).toBeInTheDocument()
   })
 
   it('before launch, only the collection is checked', async () => {

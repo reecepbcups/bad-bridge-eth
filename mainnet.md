@@ -28,9 +28,6 @@ Pinata is the only public gateway that still serves these. ipfs.io, dweb.link an
 |Env|Value|
 |-|-|
 |`ESCROW`|raw 32 bytes of the new escrow, see step 2|
-|`OWNER`|**TODO** approved Ethereum Safe; a nonzero address is required|
-|`ROYALTY_BPS`|`500`|
-|`ROYALTY_RECEIVER`|**TODO** Safe or someone else's 0x? defaults to `OWNER`|
 |`CONTRACT_URI`|below|
 |`NAME` / `SYMBOL` / `BASE_URI`|defaults in `Deploy.s.sol` already match chain, don't set|
 
@@ -38,18 +35,17 @@ Pinata is the only public gateway that still serves these. ipfs.io, dweb.link an
 export CONTRACT_URI='data:application/json;utf8,{"name":"Bad Kids","description":"Bad Kids is a collection of 9,999 bad drawings of bad kids","image":"ipfs://QmSFc8TPuVwLUfxEov7s66rfKoJ75NRcBRC4uQjMRcJoZ9/badkids.jpg","external_link":"https://badkids.co/"}'
 ```
 
-Royalty isn't in the json on purpose, the contract does ERC2981. Owner can change both later.
+The bridge has no owner, so `contractURI` can't be changed after deploy. Double check it before you broadcast. No royalty either, on purpose.
 
 ## Before anything
 
-- [ ] Make the Safe on Ethereum mainnet, 2 of 2, reece + jake
 - [ ] Repeat the unsigned `send_nft` simulation against the intended collection and escrow. The 2026-11-05 audit reached the receiver hook and got the expected wrong-collection rejection from the test escrow; this did not move a real kid
 - [ ] Run the contract tests and real-proof fork test described in `README.md`, and rebuild the escrow artifact below
 - [ ] Rotate `NETWORK_PRIVATE_KEY` (the old prover key leaked into a chat log)
 - [ ] Audit `parse()` and the escrow receive path, fuzz more
 - [ ] Set up Vercel with the artifact proxy, or "Prove it yourself" won't work. See `ui/README.md` Hosting
 - [ ] Recheck the source collection's migration admin and resolve that trust assumption with its owners. The bridge cannot remove the source collection administrator's power to change its code
-- [ ] Record the final Safe, royalty receiver, escrow and bridge addresses. None of these launch actions is completed by running the local test suite
+- [ ] Record the final escrow and bridge addresses. None of these launch actions is completed by running the local test suite
 
 The tests exercise this bridge and its integration with the deployed verifier. They are not an independent audit of SP1's circuits, Eureka, or Cosmos Hub consensus.
 
@@ -94,13 +90,10 @@ export ESCROW=0x$(gaiad debug addr <escrow cosmos1...> | awk '/Address \(hex\)/{
 
 ```bash
 cd eth
-export OWNER=<safe>
-export ROYALTY_BPS=500
-# export ROYALTY_RECEIVER=<0x...>   only if it's not the Safe
 forge script script/Deploy.s.sol --rpc-url https://ethereum-rpc.publicnode.com --broadcast --account <deployer>
 ```
 
-The script logs owner, royalty receiver, wei per 1 ETH and contractURI. Eyeball them before moving on.
+The script logs the bridge, light client and contractURI. Eyeball them before moving on, contractURI is final.
 
 ### 4. UI
 
@@ -123,7 +116,7 @@ gaiad tx wasm execute <cw721 cosmos1...> '{"send_nft":{"contract":"<escrow cosmo
 
 2. If the Eureka client is stale, send a little ATOM over Eureka to nudge it (~10 min)
 3. Open the kid in a local UI build and hit "Prove it yourself"
-4. `claim(id)` and check `ownerOf`, `tokenURI` and `royaltyInfo`
+4. `claim(id)` and check `ownerOf`, `tokenURI` and `contractURI`
 5. If the kid didn't land, migrate the escrow to fixed code (`gaiad tx wasm migrate`) and go again. Only move on once a real kid has crossed
 6. Renounce the escrow admin and clear the CosmWasm admin. While it's alive an `EmergencyUnlock` can put the same kid on both chains, even one with no `Proven` event yet, since any old Eureka root still proves the record. Don't unlock the smoke test kid, just renounce
 
@@ -140,8 +133,3 @@ gaiad tx wasm clear-contract-admin <escrow cosmos1...> \
 Verify that raw escrow storage key `admin` is absent (`61646d696e` in hex), and separately that the contract's CosmWasm migration admin is empty. Simulating another `renounce_admin` from the former admin must fail with `unauthorized`; there is no need to pay for a second transaction. Only then enable public deposits.
 
 The Ethereum bridge permanently pins its light client. A retired, expired or frozen client can stop unfinished transfers; deploying another client alone does not update this bridge. Check the client's health and router mapping before opening deposits. Do not use EmergencyUnlock after any stored Hub root could prove the record, even if no Ethereum `Proven` event exists yet.
-
-## Open
-
-- Safe address?
-- Royalty to the Safe or somewhere else?
