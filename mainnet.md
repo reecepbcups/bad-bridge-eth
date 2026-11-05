@@ -46,6 +46,8 @@ Royalty isn't in the json on purpose, the contract does ERC2981. Owner can chang
 - [ ] Repeat the unsigned `send_nft` simulation against the intended collection and escrow. The 2026-11-05 audit reached the receiver hook and got the expected wrong-collection rejection from the test escrow; this did not move a real kid
 - [ ] Run the contract tests and real-proof fork test described in `README.md`, and rebuild the escrow artifact below
 - [ ] Rotate `NETWORK_PRIVATE_KEY` (the old prover key leaked into a chat log)
+- [ ] Audit `parse()` and the escrow receive path, fuzz more
+- [ ] Set up Vercel with the artifact proxy, or "Prove it yourself" won't work. See `ui/README.md` Hosting
 - [ ] Recheck the source collection's migration admin and resolve that trust assumption with its owners. The bridge cannot remove the source collection administrator's power to change its code
 - [ ] Record the final Safe, royalty receiver, escrow and bridge addresses. None of these launch actions is completed by running the local test suite
 

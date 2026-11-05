@@ -1,52 +1,56 @@
 # Bad Bridge
 
-One-way NFT bridge, Cosmos Hub cw721 -> Ethereum ERC721. Reuses the IBC Eureka `cosmoshub-0` SP1 light client already on Ethereum mainnet, so no relayer, no channel, no light client of our own. Design is in `bad-bridge-design.md`.
+A one way bridge that moves Bad Kids from Cosmos Hub (cw721) to Ethereum (ERC721).
+
+There's no relayer, no IBC channel and no light client of our own. The bridge reuses the SP1 light client of the Hub (`cosmoshub-0`) that IBC Eureka already runs on Ethereum mainnet. The full design is in [`bad-bridge-design.md`](bad-bridge-design.md).
 
 ## How it works
 
-1. `send_nft` to the Hub escrow, with your ETH address as the message
-2. Escrow stores a raw record: key `"b" || token_id`, value `<20 byte ETH address>`
-3. A prover (the UI's "Prove it yourself", from the user's wallet) proves that record against the app hash the Eureka client stores, wraps it in a Groth16 proof with SP1
-4. `BadBridge.submitBatch` verifies the proof and records token id + recipient
-5. Anyone calls `claim(id)`, which mints that id to the recipient
+1. You `send_nft` your kid to the escrow on the Hub, with your Ethereum address as the message
+2. The escrow stores a raw record, key `"b" || token_id` and value `<20 byte ETH address>`
+3. A prover proves that record against the app hash the Eureka client stores, wrapped in an SP1 Groth16 proof. The UI's "Prove it yourself" does this from your own wallet
+4. `BadBridge.submitBatch` checks the proof and records the token id and recipient
+5. Anyone can call `claim(id)`, which mints that kid to the recipient
 
-The prover can't lie, every record is checked on-chain. Worst case nobody submits.
+The prover can't lie since every record gets checked on chain. Worst case, nobody submits and kids wait.
 
-Metadata doesn't move. `tokenURI` is `baseURI + id`, same IPFS folder as the Hub.
+Metadata doesn't move. `tokenURI` is `baseURI + id`, pointing at the same IPFS folder as the Hub collection.
 
-## Pieces
+## Repo layout
 
-|Piece|Where|
+|Folder|What's in it|
 |-|-|
-|escrow (CosmWasm)|`escrow/`|
-|bridge (`BadBridge.sol`)|`eth/`|
+|`escrow/`|CosmWasm escrow on the Hub|
+|`eth/`|`BadBridge.sol`, the ERC721 on Ethereum|
+|`ui/`|The web app (send, prove, claim). See [`ui/README.md`](ui/README.md)|
+|`spec/`|Quint specs for both chains|
+|`scripts/`|Escrow build and deploy helpers|
 
-## Checking it
-
-Unit + fuzz tests:
+## Running the tests
 
 ```bash
-cd escrow && cargo test        # tests/fuzz.rs runs random callers against a reference model
-cd eth && forge test           # test/Access.t.sol is the who-can-call-what part, invariants are slow (~10 min)
+cd escrow && cargo test   # tests/fuzz.rs runs random callers against a reference model
+cd eth && forge test      # test/Access.t.sol covers who can call what. Invariants are slow (~10 min)
+cd ui && pnpm check       # typecheck, lint, unit tests
 ```
 
-The Ethereum build uses Solar through Foundry 1.9.0 or newer. Initialize the pinned libraries with `git submodule update --init --recursive`. The normal suite checks the exact verifier call and that a verifier rejection cannot record or mint a token. To exercise the checked-in genuine proof and reject modified proofs against the real Ethereum contracts:
+The Ethereum side builds with Solar, so you need Foundry 1.9.0 or newer. Pull the pinned libraries first with `git submodule update --init --recursive`.
+
+To run the real proof we checked in against the live Ethereum contracts (and make sure tampered proofs fail), point the fork test at an RPC. It forks mainnet locally and never broadcasts. Without `ETH_FORK_RPC` these tests skip.
 
 ```bash
 cd eth
 ETH_FORK_RPC=https://ethereum-rpc.publicnode.com forge test --match-contract RealProofForkTest
 ```
 
-This uses a local fork of current Ethereum state with public reads and never broadcasts. The light client retains the historical Hub root used by the fixture. These three tests explicitly skip when `ETH_FORK_RPC` is unset; a future upstream migration can require updating the integration fixture.
+### Specs
 
-Before uploading escrow code, run `scripts/build-escrow.sh` from the repository root. It builds the current Rust source and updates `escrow/artifacts/checksums.txt`; see `escrow/BUILD.md` for the pinned compiler and compatibility checks. The deployment script requires explicit `CW721`, `ADMIN`, and `FROM_KEY` values. Its argument handling can be checked without a node or wallet with `python3 scripts/test-instantiate-escrow.py`.
+Each Quint spec has a prod module that should hold and a broken variant that should fail, so you know the invariants actually bite.
 
-Quint specs live in `spec/`. Each one has a prod module that should hold, plus a broken variant that should fail, so you know the invariants actually bite.
-
-|Spec|What|Should hold|Should break|
+|Spec|Covers|Should hold|Should break|
 |-|-|-|-|
 |`escrow.qnt`|escrow entry points|`escrowProd`|`escrowNoGuards`|
-|`bridge.qnt`|BadBridge.sol entry points|`bridgeProd`|`bridgeNoGuards`, `bridgeUnpinned`|
+|`bridge.qnt`|`BadBridge.sol` entry points|`bridgeProd`|`bridgeNoGuards`, `bridgeUnpinned`|
 |`badbridge.qnt`|both chains together|`prod`|`today`, `noCanonicalCheck`, `adminLive`, `escrowAdminLive`, `noSendGuard`|
 
 ```bash
@@ -57,43 +61,38 @@ quint run badbridge.qnt --main=prod --invariant=safety --max-samples=50000
 quint verify escrow.qnt --main=escrowProd --invariant=safety --max-steps=6   # apalache, bounded
 ```
 
-`adminLive` in `badbridge.qnt` has two scripted exploits, run them with `quint test badbridge.qnt --main=adminLive --match=AfterHonestUnlock`.
+`adminLive` has two scripted exploits. Run them with `quint test badbridge.qnt --main=adminLive --match=AfterHonestUnlock`.
 
-`noSendGuard` shows why the UI checks the pinned client before every send (`--match='sendIntoDeadClient|strandedInFlight'`). The second run is the gap it can't close: a kid in flight when the client dies is stuck, even in prod.
+`noSendGuard` shows why the UI checks the light client before every send (`--match='sendIntoDeadClient|strandedInFlight'`). The second run is the gap nobody can close. A kid that's in flight when the client dies is stuck, even in prod.
 
-## Deployments
+## Deploying
 
-Eureka light client: `0x4bB8A05D5b40dF7a3B97770E1943461B681B62E9`
+Build the escrow with `scripts/build-escrow.sh` from the repo root. It rebuilds from source with the pinned optimizer and updates `escrow/artifacts/checksums.txt`. [`escrow/BUILD.md`](escrow/BUILD.md) has the details.
 
-**ReeceBadTest** (RBT, done, #2 and #3 bridged 2026-09-23)
+The full launch runbook for the real collection lives in [`mainnet.md`](mainnet.md). That covers the escrow, the bridge, the UI, the smoke test and removing the escrow admins before deposits open.
 
-- cw721: `cosmos158d2rz0aw8cxx86j0tl8gfwleqyqefr9xdgth2jdfse2d9uumltsu83rfr`
-- escrow: `cosmos1zr8k7ch8e9g7lqcgcd0peaklj43ymxvcusvqk7ver4zaqgdvragq8gumtv`
-- bridge: `0xDe185D7902340086cc4C37322584e246DC5eE198` (old version, no votes/owner/royalty)
+## Addresses
 
-**ReeceBadTestTwo** (RBT2, new bridge with votes, owner, royalty 5%)
+|Thing|Address|
+|-|-|
+|Bad Kids cw721 (Hub)|`cosmos12gsv9tmjhhg86wg9fnd9cnju28jx3fxva9cn8dh9meketkfxxajqmg3exz`|
+|Eureka light client (Ethereum)|`0x4bB8A05D5b40dF7a3B97770E1943461B681B62E9`|
+|Escrow (Hub)|not deployed yet|
+|BadBridge (Ethereum)|not deployed yet|
 
-- cw721: same as above
-- escrow: `cosmos1rce3kmvc2v955f64gp8cjtwqzma3qg8t4puk7swmqd56j25gfqgq3s8037`
-- bridge: `0xdDef181a0b9F5A090830F9ccBE5Ffb0D2BA07A7e`
-- owner: `0xd0D72e3b30e3527490d5526456d58d1ea32905E0`
+## Things we learned the hard way
 
-## Gotchas we hit
+- A tokenfactory "ticket token" over Eureka ICS20 doesn't work. IBC v2 rejects denoms with a `/`
+- The Ethereum router's `recvPacket` is permissioned, so we can't relay ourselves
+- The Ethereum light client only moves when Eureka relays something. Send a little ATOM over Eureka to nudge it (~10 min)
+- publicnode prunes too much state for proofs. Use polkachu, kjnodes or ecostake
+- Use the `sp1-programs-v2.0.0` ELF. HEAD builds the wrong vkey
+- `ConsensusState.timestamp` is in nanoseconds
 
-- Tokenfactory "ticket token" over Eureka ICS20 is dead, IBC v2 rejects denoms with a `/`
-- Eth router `recvPacket` is permissioned, we can't relay ourselves
-- Eth client only moves when Eureka relays something. Send a little ATOM over Eureka to nudge it (~10 min)
-- publicnode prunes too much, use polkachu / kjnodes / ecostake for proofs
-- Use the `sp1-programs-v2.0.0` ELF, HEAD builds the wrong vkey
-- `ConsensusState.timestamp` is nanoseconds
+## Trust
 
-## Before real Bad Kids
+The bridge checks every kid against the Hub's state, but it still leans on SP1's circuits, IBC Eureka and Cosmos Hub consensus. Our tests cover this code and how it talks to the deployed verifier. They aren't an audit of those systems.
 
-- Confirm `cw721-migration` (`cosmos12gsv9tmjhhg86wg9fnd9cnju28jx3fxva9cn8dh9meketkfxxajqmg3exz`) calls the receiver hook on `send_nft`
-- Escrow goes up with a temporary CosmWasm admin so a bad smoke test can be fixed by migrating. Clear it (`clear-contract-admin`) before enabling public deposits
-- Renounce the escrow's separate internal EmergencyUnlock admin before enabling public deposits too, clearing the CosmWasm admin doesn't remove it
-- Audit `parse()` and the escrow receive path, fuzz more
-- Rotate the prover key, it leaked into a chat log
-- Set up Vercel with the artifact proxy, or "Prove it yourself" won't work. See `ui/README.md` Hosting
+## License
 
-Final addresses, Safe creation, key rotation, source-collection migration authority, and on-chain deployment remain operator launch steps in `mainnet.md`. Local checks do not constitute an independent audit of SP1's circuits or the upstream consensus systems.
+[MIT](LICENSE)
