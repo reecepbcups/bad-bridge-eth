@@ -107,7 +107,7 @@ export function AboutView() {
             <summary>What happens to the kid on the Hub?</summary>
             <p>
               It stays locked in the escrow. Permanent locking requires both the escrow's upgrade admin and its separate
-              emergency-unlock admin to be removed; the send screen checks both.
+              emergency-unlock admin to be removed; the site flags both.
               {emergencyAdmin ? ' This escrow still has an emergency-unlock admin who can return deposited kids.' : ''}
               {collectionAdmin
                 ? ` One catch: the ${deployment.collectionName} contract has an admin who could upgrade it and move kids out of the escrow (see above).${
@@ -272,7 +272,7 @@ function TrustList({ facts, failed }: { facts: TrustFacts | undefined; failed: b
           <Fact tone="unknown">{unknown("the escrow's emergency unlock authority")}</Fact>
         ) : facts.emergencyAdmin ? (
           <Fact tone="caveat"><b>The escrow has an emergency-unlock admin.</b> <Admin address={facts.emergencyAdmin} /> can
-            return deposited kids, including kids already proven on Ethereum. Sending is disabled until this power is renounced.</Fact>
+            return deposited kids, including kids already proven on Ethereum.</Fact>
         ) : (
           <Fact><b>Emergency unlock is renounced.</b> The escrow's internal admin can no longer release deposited kids.</Fact>
         ))}

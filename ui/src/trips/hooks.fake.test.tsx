@@ -325,7 +325,7 @@ describe('useConfigSanity', () => {
   it('passes when both contracts match', async () => {
     const { wrapper } = fakeBridge()
     const { result } = renderHook(() => useConfigSanity(), { wrapper })
-    expect(await loaded(result)).toEqual({ ok: true, status: 'ok', problems: [] })
+    expect(await loaded(result)).toEqual({ ok: true, status: 'ok', problems: [], warnings: [] })
   })
 
   it('lists mismatches in plain words', async () => {
@@ -719,16 +719,25 @@ describe('useSendKids: fresh light client check', () => {
     expect(hubWriter.send).not.toHaveBeenCalled()
   })
 
-  it.each(['upgrade', 'unlock', 'unreadable'] as const)('blocks a send when escrow authority is %s', async (power) => {
+  it('blocks a send when escrow authority is unreadable', async () => {
     const chain = fakeChain()
-    if (power === 'upgrade') chain.contracts.set(LIVE.hub.escrow!, { codeId: 750, admin: HUB_A })
-    if (power === 'unlock') chain.emergencyAdmin = HUB_A
-    if (power === 'unreadable') chain.fail.escrowAdmin = networkError()
+    chain.fail.escrowAdmin = networkError()
     const hubWriter = fakeHubWriter(chain, HUB_A)
     const { wrapper } = fakeBridge(chain, { hubWriter })
     const { result } = renderHook(() => useSendKids(), { wrapper })
     await act(() => expect(result.current.run([1], ALICE)).rejects.toBeInstanceOf(BridgeError))
     expect(hubWriter.send).not.toHaveBeenCalled()
+  })
+  // admins are flagged, not blocking, so the UI can be tested before they're removed
+  it.each(['upgrade', 'unlock'] as const)('still sends when the escrow has an %s admin', async (power) => {
+    const chain = fakeChain()
+    if (power === 'upgrade') chain.contracts.set(LIVE.hub.escrow!, { codeId: 750, admin: HUB_A })
+    if (power === 'unlock') chain.emergencyAdmin = HUB_A
+    const hubWriter = fakeHubWriter(chain, HUB_A)
+    const { wrapper } = fakeBridge(chain, { hubWriter })
+    const { result } = renderHook(() => useSendKids(), { wrapper })
+    await act(() => result.current.run([1], ALICE))
+    expect(hubWriter.send).toHaveBeenCalled()
   })
   it('refuses when the client froze after health was read, and never touches the wallet', async () => {
     const chain = fakeChain()

@@ -51,6 +51,20 @@ describe('Banners', () => {
     expect(alert).toHaveTextContent('The bridge trusts another escrow.')
   })
 
+  it('flags escrow admins without switching sending off', () => {
+    hooks.health = state(health(false))
+    hooks.sanity = state<ConfigSanity>({
+      ok: true,
+      status: 'ok',
+      problems: [],
+      warnings: [{ code: 'EscrowAdmin', power: 'emergency unlock', admin: 'cosmos1admin', message: 'The escrow still has an emergency unlock admin.' }],
+    })
+    render(<Banners />)
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('The escrow still has admins')
+    expect(screen.getByRole('status')).toHaveTextContent('The escrow still has an emergency unlock admin.')
+  })
+
   it('leaves "not live yet" to the pick screen', () => {
     hooks.health = state(health(false))
     hooks.sanity = state<ConfigSanity>({ ok: false, status: 'not-live', problems: [{ code: 'NotLive' }] })

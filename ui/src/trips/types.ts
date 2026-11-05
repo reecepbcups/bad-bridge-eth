@@ -111,6 +111,8 @@ export interface ConfigSanity {
   ok: boolean
   /** What's wrong, for the visible error. Empty when ok or unknown. */
   problems: ConfigProblem[]
+  /** Shown but don't block sending: escrow admins, so the UI can be tested before they're removed. */
+  warnings?: ConfigProblem[]
   /** Why ok is what it is. Always set by useConfigSanity. */
   status?: SanityStatus
 }

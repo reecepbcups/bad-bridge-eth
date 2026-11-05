@@ -8,6 +8,7 @@
 .banner.paused { background: var(--sun); color: var(--sun-ink); box-shadow: 3px 3px 0 var(--ink); }
 .banner.bad { border: 2.5px dashed var(--crayon); }
 .banner.bad b { color: var(--crayon-ink); }
+.banner.warn { border: 2.5px dashed var(--sun-ink); }
 .banner ul { margin: 4px 0 0; padding-left: 18px; overflow-wrap: anywhere; }
 
 /* demo mode: a full-width strip on top of every page, out to the page edges */

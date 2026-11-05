@@ -38,7 +38,7 @@ describe('trip hooks over the demo adapter', () => {
     const { result } = renderHook(() => ({ health: useHealth(), sanity: useConfigSanity() }), { wrapper: demoWrapper() })
     await waitFor(() => expect(result.current.sanity.data).toBeDefined())
     await waitFor(() => expect(result.current.health.data).toBeDefined())
-    expect(result.current.sanity.data).toEqual({ ok: true, status: 'ok', problems: [] })
+    expect(result.current.sanity.data).toEqual({ ok: true, status: 'ok', problems: [], warnings: [] })
     expect(result.current.health.data).toMatchObject({ lagBlocks: 100, lagMinutes: 10, frozen: false, stale: false })
   })
 
