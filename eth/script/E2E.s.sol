@@ -26,8 +26,7 @@ contract E2E is Script {
         vm.startBroadcast();
         BadBridge bridge = BadBridge(vm.envOr("BRIDGE", address(0)));
         if (address(bridge) == address(0)) {
-            // test deploy: the broadcaster owns it and takes a 0% royalty
-            (, address sender,) = vm.readCallers();
+            // test deploy, no contractURI
             bridge = new BadBridge(
                 ROUTER,
                 "cosmoshub-0",
@@ -35,9 +34,6 @@ contract E2E is Script {
                 vm.envOr("NAME", string("Bad Bridge Test")),
                 vm.envOr("SYMBOL", string("BBT")),
                 vm.envOr("BASE_URI", string("ipfs://bad-bridge-test/")),
-                sender,
-                sender,
-                0,
                 ""
             );
         }

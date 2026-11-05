@@ -8,41 +8,24 @@ import { BadBridgeBase } from "./BadBridge.t.sol";
 /// Who can call what. Every state changing entry point is either open to anyone and fully
 /// determined by its inputs, or gated to one role.
 contract BadBridgeAccessTest is BadBridgeBase {
-    function testFuzz_nonOwnerLocksOut(address eve, address receiver, uint96 bps, string calldata uri) public {
-        // msg.sender is never zero on chain, and zero would match the empty pendingOwner
-        vm.assume(eve != OWNER && eve != address(0));
-        bytes memory unauthorized = abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", eve);
+    /// No owner or admin. The old owner and royalty entry points are gone, and contractURI is fixed at deploy.
+    function testFuzz_noPrivilegedCalls(address eve, string calldata uri) public {
+        bytes[7] memory calls = [
+            abi.encodeWithSignature("owner()"),
+            abi.encodeWithSignature("pendingOwner()"),
+            abi.encodeWithSignature("transferOwnership(address)", eve),
+            abi.encodeWithSignature("renounceOwnership()"),
+            abi.encodeWithSignature("acceptOwnership()"),
+            abi.encodeWithSignature("setContractURI(string)", uri),
+            abi.encodeWithSignature("setRoyalty(address,uint96)", eve, uint96(500))
+        ];
         vm.startPrank(eve);
-        vm.expectRevert(unauthorized);
-        bridge.setRoyalty(receiver, bps);
-        vm.expectRevert(unauthorized);
-        bridge.setContractURI(uri);
-        vm.expectRevert(unauthorized);
-        bridge.transferOwnership(eve);
-        vm.expectRevert(unauthorized);
-        bridge.renounceOwnership();
-        // nobody is pending yet, so accepting is also out
-        vm.expectRevert(unauthorized);
-        bridge.acceptOwnership();
+        for (uint256 i = 0; i < calls.length; ++i) {
+            (bool ok,) = address(bridge).call(calls[i]);
+            assertFalse(ok);
+        }
         vm.stopPrank();
-        assertEq(bridge.owner(), OWNER);
-    }
-
-    /// Only the exact pending owner can finish a handover, and the old owner keeps control until then.
-    function testFuzz_onlyPendingOwnerAccepts(address next, address eve) public {
-        vm.assume(next != address(0) && eve != next && eve != OWNER);
-        vm.prank(OWNER);
-        bridge.transferOwnership(next);
-
-        vm.prank(eve);
-        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", eve));
-        bridge.acceptOwnership();
-        assertEq(bridge.owner(), OWNER);
-
-        vm.prank(next);
-        bridge.acceptOwnership();
-        assertEq(bridge.owner(), next);
-        assertEq(bridge.pendingOwner(), address(0));
+        assertEq(bridge.contractURI(), "ipfs://c");
     }
 
     /// submitBatch and claim are open, but msg.sender never ends up in state. The proof decides everything.
@@ -77,13 +60,13 @@ contract BadBridgeAccessTest is BadBridgeBase {
         assertEq(bridge.balanceOf(caller), 0);
     }
 
-    /// A claimed kid only moves when its holder, or someone the holder approved, says so. Not the owner, not the prover.
+    /// A claimed kid only moves when its holder, or someone the holder approved, says so. Not the deployer, not the prover.
     function testFuzz_onlyHolderMovesKid(address eve, uint32 tokenId) public {
         address alice = makeAddr("alice");
         vm.assume(eve != alice && eve != address(0));
         proveAndClaim(tokenId, alice);
 
-        address[2] memory outsiders = [eve, OWNER];
+        address[2] memory outsiders = [eve, address(this)];
         for (uint256 i = 0; i < outsiders.length; ++i) {
             if (outsiders[i] == alice) continue;
             vm.prank(outsiders[i]);
@@ -117,8 +100,7 @@ contract BadBridgeAccessTest is BadBridgeBase {
     }
 }
 
-/// Random actors hammer every entry point. A reference model of the roles says what must succeed,
-/// so a call landing where the model says it can't (or failing where it should work) breaks the run.
+/// Random actors hammer every entry point. None of them has a role, so nothing they do can rewrite a record.
 contract AccessHandler is Test {
     BadBridge public bridge;
     bytes32 root;
@@ -126,78 +108,18 @@ contract AccessHandler is Test {
     address[4] public actors;
 
     // model
-    address public owner;
-    address public pending;
     mapping(uint32 => address) public firstSeen;
     uint32[] public ids;
 
-    constructor(BadBridge bridge_, bytes32 root_, bytes32 escrow_, address owner_) {
+    constructor(BadBridge bridge_, bytes32 root_, bytes32 escrow_, address deployer) {
         bridge = bridge_;
         root = root_;
         escrow = escrow_;
-        owner = owner_;
-        actors = [owner_, makeAddr("eve"), makeAddr("dao"), makeAddr("mallory")];
+        actors = [deployer, makeAddr("eve"), makeAddr("dao"), makeAddr("mallory")];
     }
 
     function actor(uint256 seed) internal view returns (address) {
         return actors[seed % actors.length];
-    }
-
-    function setRoyalty(uint256 who, uint96 bps) external {
-        address a = actor(who);
-        bps = uint96(bound(bps, 0, 1000));
-        vm.prank(a);
-        try bridge.setRoyalty(a, bps) {
-            assertEq(a, owner, "non owner set royalty");
-        } catch {
-            assertTrue(a != owner, "owner could not set royalty");
-        }
-    }
-
-    function setContractURI(uint256 who, string calldata uri) external {
-        address a = actor(who);
-        vm.prank(a);
-        try bridge.setContractURI(uri) {
-            assertEq(a, owner, "non owner set contractURI");
-        } catch {
-            assertTrue(a != owner, "owner could not set contractURI");
-        }
-    }
-
-    function transferOwnership(uint256 who, uint256 to) external {
-        address a = actor(who);
-        address next = actor(to);
-        vm.prank(a);
-        try bridge.transferOwnership(next) {
-            assertEq(a, owner, "non owner started a handover");
-            pending = next;
-        } catch {
-            assertTrue(a != owner, "owner could not start a handover");
-        }
-    }
-
-    function acceptOwnership(uint256 who) external {
-        address a = actor(who);
-        vm.prank(a);
-        try bridge.acceptOwnership() {
-            assertEq(a, pending, "non pending owner took over");
-            owner = a;
-            pending = address(0);
-        } catch {
-            assertTrue(a != pending, "pending owner could not accept");
-        }
-    }
-
-    function renounceOwnership(uint256 who) external {
-        address a = actor(who);
-        vm.prank(a);
-        try bridge.renounceOwnership() {
-            assertEq(a, owner, "non owner renounced");
-            owner = address(0);
-            pending = address(0);
-        } catch {
-            assertTrue(a != owner, "owner could not renounce");
-        }
     }
 
     function submit(uint256 who, uint32 tokenId, uint256 to) external {
@@ -241,22 +163,16 @@ contract BadBridgeAccessInvariantTest is BadBridgeBase {
 
     function setUp() public override {
         super.setUp();
-        handler = new AccessHandler(bridge, cs.root, ESCROW, OWNER);
+        handler = new AccessHandler(bridge, cs.root, ESCROW, address(this));
         targetContract(address(handler));
     }
 
-    function invariant_rolesMatchModel() public view {
-        assertEq(bridge.owner(), handler.owner());
-        assertEq(bridge.pendingOwner(), handler.pending());
+    function invariant_contractURIFixed() public view {
+        assertEq(bridge.contractURI(), "ipfs://c");
     }
 
-    function invariant_royaltyCapped() public view {
-        (, uint256 amount) = bridge.royaltyInfo(1, 10_000);
-        assertLe(amount, bridge.MAX_ROYALTY_BPS());
-    }
-
-    /// Whatever the owner did, records stick and minted kids sit with their recipient (nobody transfers here).
-    function invariant_ownerNeverTouchesKids() public view {
+    /// Whatever anyone did, records stick and minted kids sit with their recipient (nobody transfers here).
+    function invariant_nobodyTouchesKids() public view {
         for (uint256 i = 0; i < handler.idsLength(); ++i) {
             uint32 id = handler.ids(i);
             address want = handler.firstSeen(id);

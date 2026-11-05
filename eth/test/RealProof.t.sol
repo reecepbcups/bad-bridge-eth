@@ -32,8 +32,7 @@ contract RealProofForkTest is Test {
         });
         bridge = new BadBridge(
             IRouter(0x3aF134307D5Ee90faa2ba9Cdba14ba66414CF1A7),
-            "cosmoshub-0", ESCROW, "Bad Bridge Test", "BBT", "ipfs://test/",
-            address(this), address(this), 0, ""
+            "cosmoshub-0", ESCROW, "Bad Bridge Test", "BBT", "ipfs://test/", ""
         );
     }
 

@@ -2,18 +2,17 @@
 // code order. A revert rolls everything back, so a failed call only touches the ghost vars.
 // The Hub is modeled as raw KV state the Eureka client snapshots, attackers included.
 module bridge {
-  // false drops parse's escrow/namespace checks, onlyOwner and the holder check on transfers
+  // false drops parse's escrow/namespace checks and the holder check on transfers
   const GUARDS: bool
   // CLIENT resolved once at deploy. false means asking the router on every call, like before
   const PINNED: bool
 
   pure val NONE = ""
   pure val ZERO = "0x0"
-  pure val OWNER0 = "owner"
   pure val EVE = "eve"
   pure val USERS = Set("alice", "bob", EVE)
-  pure val CALLERS = USERS.union(Set(OWNER0, "dao"))
-  pure val MAX_BPS = 1000
+  // no owner. The deployer is just another caller
+  pure val CALLERS = USERS.union(Set("deployer", "dao"))
 
   // Hub side. "long" is any value that isn't 20 bytes
   pure val ESCROW = "escrow"
@@ -43,15 +42,12 @@ module bridge {
   // BadBridge storage
   var proven: int -> str
   var nftOwner: int -> str
-  var owner: str
-  var pending: str
-  var royaltyBps: int
   // what delegate() stored. NONE means unset, which reads as self
   var delegatee: str -> str
   var votes: str -> int
 
   // ghosts
-  var last: { caller: str, kind: str, res: Res, prevOwner: str, prevPending: str, prevHolder: str }
+  var last: { caller: str, kind: str, res: Res, prevHolder: str }
   var mintedTo: int -> str
   var mints: int -> int
   var provenChanges: Set[(str, str)]
@@ -69,12 +65,9 @@ module bridge {
     routerSwapped' = false,
     proven' = IDS.mapBy(_ => NONE),
     nftOwner' = IDS.mapBy(_ => NONE),
-    owner' = OWNER0,
-    pending' = NONE,
-    royaltyBps' = 500,
     delegatee' = CALLERS.mapBy(_ => NONE),
     votes' = CALLERS.mapBy(_ => 0),
-    last' = { caller: NONE, kind: "init", res: OK, prevOwner: NONE, prevPending: NONE, prevHolder: NONE },
+    last' = { caller: NONE, kind: "init", res: OK, prevHolder: NONE },
     mintedTo' = IDS.mapBy(_ => NONE),
     mints' = IDS.mapBy(_ => 0),
     provenChanges' = Set(),
@@ -83,12 +76,11 @@ module bridge {
 
   action hubSame = all { hub' = hub, escrowRecord' = escrowRecord, roots' = roots, frozen' = frozen, routerSwapped' = routerSwapped }
   action ethSame = all {
-    proven' = proven, nftOwner' = nftOwner, owner' = owner, pending' = pending, royaltyBps' = royaltyBps,
-    delegatee' = delegatee, votes' = votes, mintedTo' = mintedTo, mints' = mints,
+    proven' = proven, nftOwner' = nftOwner, delegatee' = delegatee, votes' = votes, mintedTo' = mintedTo, mints' = mints,
   }
   action noKids = all { provenChanges' = Set(), kidsMoved' = false }
-  def lastOf(caller: str, kind: str, res: Res): { caller: str, kind: str, res: Res, prevOwner: str, prevPending: str, prevHolder: str } =
-    { caller: caller, kind: kind, res: res, prevOwner: owner, prevPending: pending, prevHolder: NONE }
+  def lastOf(caller: str, kind: str, res: Res): { caller: str, kind: str, res: Res, prevHolder: str } =
+    { caller: caller, kind: kind, res: res, prevHolder: NONE }
 
   // ---- Hub ----
 
@@ -165,8 +157,7 @@ module bridge {
         proven' = nxt,
         provenChanges' = IDS.filter(t => nxt.get(t) != proven.get(t)).map(t => (proven.get(t), nxt.get(t))),
         kidsMoved' = nxt != proven,
-        nftOwner' = nftOwner, owner' = owner, pending' = pending, royaltyBps' = royaltyBps,
-        delegatee' = delegatee, votes' = votes, mintedTo' = mintedTo, mints' = mints,
+        nftOwner' = nftOwner, delegatee' = delegatee, votes' = votes, mintedTo' = mintedTo, mints' = mints,
       } else all { ethSame, noKids },
     }
   }
@@ -191,7 +182,7 @@ module bridge {
       hubSame,
       if (res.ok) all {
         mintTo(t, proven.get(t)),
-        proven' = proven, owner' = owner, pending' = pending, royaltyBps' = royaltyBps, delegatee' = delegatee,
+        proven' = proven, delegatee' = delegatee,
         provenChanges' = Set(), kidsMoved' = true,
       } else all { ethSame, noKids },
     }
@@ -209,7 +200,7 @@ module bridge {
         votes' = CALLERS.mapBy(a => votes.get(a) + fresh.filter(t => delegates(proven.get(t)) == a).size()),
         mintedTo' = IDS.mapBy(t => if (fresh.contains(t)) proven.get(t) else mintedTo.get(t)),
         mints' = IDS.mapBy(t => if (fresh.contains(t)) mints.get(t) + 1 else mints.get(t)),
-        proven' = proven, owner' = owner, pending' = pending, royaltyBps' = royaltyBps, delegatee' = delegatee,
+        proven' = proven, delegatee' = delegatee,
         provenChanges' = Set(), kidsMoved' = fresh.size() > 0,
       } else all { ethSame, noKids },
     }
@@ -230,7 +221,7 @@ module bridge {
         nftOwner' = nftOwner.set(t, dest),
         votes' = if (delegates(from) == delegates(dest)) votes
           else votes.set(delegates(from), votes.get(delegates(from)) - 1).set(delegates(dest), votes.get(delegates(dest)) + 1),
-        proven' = proven, owner' = owner, pending' = pending, royaltyBps' = royaltyBps, delegatee' = delegatee,
+        proven' = proven, delegatee' = delegatee,
         mintedTo' = mintedTo, mints' = mints,
         provenChanges' = Set(), kidsMoved' = true,
       } else all { ethSame, noKids },
@@ -248,47 +239,8 @@ module bridge {
       hubSame, noKids,
       delegatee' = delegatee.set(caller, nxt),
       votes' = if (old == nxt) votes else votes.set(old, votes.get(old) - bal).set(nxt, votes.get(nxt) + bal),
-      proven' = proven, nftOwner' = nftOwner, owner' = owner, pending' = pending, royaltyBps' = royaltyBps,
-      mintedTo' = mintedTo, mints' = mints,
+      proven' = proven, nftOwner' = nftOwner, mintedTo' = mintedTo, mints' = mints,
     }
-  }
-
-  def onlyOwner(caller: str): bool = not(GUARDS) or caller == owner
-
-  // owner calls never touch kids, so they share one shape
-  action ownerCall(caller: str, kind: str, res: Res, nextOwner: str, nextPending: str, nextBps: int): bool = all {
-    last' = lastOf(caller, kind, res),
-    hubSame, noKids,
-    proven' = proven, nftOwner' = nftOwner, delegatee' = delegatee, votes' = votes, mintedTo' = mintedTo, mints' = mints,
-    if (res.ok) all { owner' = nextOwner, pending' = nextPending, royaltyBps' = nextBps }
-    else all { owner' = owner, pending' = pending, royaltyBps' = royaltyBps },
-  }
-
-  action setRoyalty(caller: str, bps: int): bool = {
-    val res = if (not(onlyOwner(caller))) err("OwnableUnauthorizedAccount")
-      else if (bps > MAX_BPS) err("RoyaltyTooHigh") else OK
-    ownerCall(caller, "setRoyalty", res, owner, pending, bps)
-  }
-
-  action setContractURI(caller: str): bool = {
-    val res = if (not(onlyOwner(caller))) err("OwnableUnauthorizedAccount") else OK
-    ownerCall(caller, "setContractURI", res, owner, pending, royaltyBps)
-  }
-
-  action transferOwnership(caller: str, nxt: str): bool = {
-    val res = if (not(onlyOwner(caller))) err("OwnableUnauthorizedAccount") else OK
-    ownerCall(caller, "transferOwnership", res, owner, nxt, royaltyBps)
-  }
-
-  action acceptOwnership(caller: str): bool = {
-    val res = if (GUARDS and caller != pending) err("OwnableUnauthorizedAccount") else OK
-    ownerCall(caller, "acceptOwnership", res, caller, NONE, royaltyBps)
-  }
-
-  // Ownable2Step's _transferOwnership also clears pending
-  action renounceOwnership(caller: str): bool = {
-    val res = if (not(onlyOwner(caller))) err("OwnableUnauthorizedAccount") else OK
-    ownerCall(caller, "renounceOwnership", res, NONE, NONE, royaltyBps)
   }
 
   pure val UNIVERSE: Set[KV] = tuples(Set("wasm", "ibc"), Set(ESCROW, EVIL), Set("b", "s"), IDS, VALUES)
@@ -311,7 +263,6 @@ module bridge {
     nondet r2 = (if (i < roots.length() and roots[i].size() > 0) roots[i] else UNIVERSE).oneOf()
     nondet csOk = Set(true, true, false).oneOf()
     nondet vkOk = Set(true, false).oneOf()
-    nondet bps = Set(0, 500, 1000, 1001).oneOf()
     nondet n = 1.to(2).oneOf()
     any {
       hubEscrow(t, v),
@@ -324,11 +275,6 @@ module bridge {
       claimMany(caller, if (n == 1) [t] else [t, u]),
       transferFrom(caller, t, dest),
       delegate(caller, dest),
-      setRoyalty(caller, bps),
-      setContractURI(caller),
-      transferOwnership(caller, dest),
-      acceptOwnership(caller),
-      renounceOwnership(caller),
     }
   }
 
@@ -346,30 +292,21 @@ module bridge {
   // nothing lands while the client is frozen
   val frozenBlocksSubmit = (last.kind == "submit" and last.res.ok) implies not(frozen)
 
-  // owner powers are royalty, contractURI and handing itself over. Only the owner, or the pending one accepting.
-  val OWNER_KINDS = Set("setRoyalty", "setContractURI", "transferOwnership", "renounceOwnership")
-  val onlyOwnerAdmin = (OWNER_KINDS.contains(last.kind) and last.res.ok) implies last.caller == last.prevOwner
-  val onlyPendingAccepts = (last.kind == "acceptOwnership" and last.res.ok) implies last.caller == last.prevPending
-
   // a kid only moves when its holder moves it
   val onlyHolderTransfers = (last.kind == "transfer" and last.res.ok) implies last.caller == last.prevHolder
 
-  // kids and records only change through submit, claim and transfer, never an owner call
-  val ownerNeverTouchesKids = kidsMoved implies Set("submit", "claim", "claimMany", "transfer").contains(last.kind)
-
-  val royaltyCapped = royaltyBps <= MAX_BPS
+  // kids and records only change through submit, claim and transfer, never a delegate or Hub step
+  val onlyBridgeCallsTouchKids = kidsMoved implies Set("submit", "claim", "claimMany", "transfer").contains(last.kind)
 
   // every vote is a kid held by someone who delegates there, and they add up to supply
   val votesMatchDelegations = CALLERS.forall(a => votes.get(a) == CALLERS.filter(h => delegates(h) == a).fold(0, (s, h) => s + balance(h)))
   val votesSumToSupply = CALLERS.fold(0, (s, a) => s + votes.get(a)) == supply
 
   val safety = provenSound and provenWriteOnce and mintsMatchProven and frozenBlocksSubmit
-    and onlyOwnerAdmin and onlyPendingAccepts and onlyHolderTransfers and ownerNeverTouchesKids
-    and royaltyCapped and votesMatchDelegations and votesSumToSupply
+    and onlyHolderTransfers and onlyBridgeCallsTouchKids and votesMatchDelegations and votesSumToSupply
 
   // Witnesses. Should be violated, so the happy paths are reachable.
   val witnessNothingMinted = IDS.forall(t => nftOwner.get(t) == NONE)
-  val witnessNoHandover = owner == OWNER0
   val witnessNoTransfer = not(last.kind == "transfer" and last.res.ok)
   val witnessNoDelegation = CALLERS.forall(a => delegates(a) == a)
 }
@@ -379,7 +316,7 @@ module bridgeProd {
   import bridge(GUARDS = true, PINNED = true).*
 }
 
-// checks removed. Should break provenSound, onlyOwnerAdmin and onlyHolderTransfers.
+// checks removed. Should break provenSound and onlyHolderTransfers.
 module bridgeNoGuards {
   import bridge(GUARDS = false, PINNED = true).*
 }

@@ -11,18 +11,13 @@ abstract contract BadBridgeBase is Test {
     bytes32 constant ESCROW = bytes32(uint256(0xe5c0));
     bytes32 constant VKEY = bytes32(uint256(0x0bd8ec));
     uint64 constant HEIGHT = 100;
-    address constant OWNER = address(0x0e1);
-    address constant ROYALTY = address(0x0e2);
-    uint96 constant ROYALTY_BPS = 500;
 
     BadBridge bridge;
     BadBridge.ConsensusState cs;
 
     function setUp() public virtual {
         vm.mockCall(ROUTER, abi.encodeCall(IRouter.getClient, ("cosmoshub-0")), abi.encode(CLIENT));
-        bridge = new BadBridge(
-            IRouter(ROUTER), "cosmoshub-0", ESCROW, "Bad Kids", "BADKIDS", "ipfs://x/", OWNER, ROYALTY, ROYALTY_BPS, "ipfs://c"
-        );
+        bridge = new BadBridge(IRouter(ROUTER), "cosmoshub-0", ESCROW, "Bad Kids", "BADKIDS", "ipfs://x/", "ipfs://c");
         cs = BadBridge.ConsensusState({ timestamp: 1, root: keccak256("root"), nextValidatorsHash: bytes32(0) });
 
         vm.mockCall(CLIENT, abi.encodeCall(ISP1ICS07Tendermint.getConsensusStateHash, (HEIGHT)), abi.encode(keccak256(abi.encode(cs))));
@@ -424,122 +419,17 @@ contract BadBridgeVotesTest is BadBridgeBase {
     }
 }
 
-contract BadBridgeOwnerTest is BadBridgeBase {
-    function deployWith(address owner_, address receiver, uint96 bps) internal returns (BadBridge) {
-        return new BadBridge(IRouter(ROUTER), "cosmoshub-0", ESCROW, "Bad Kids", "BADKIDS", "ipfs://x/", owner_, receiver, bps, "");
-    }
-
-    function test_royaltyInfo() public view {
-        (address receiver, uint256 amount) = bridge.royaltyInfo(7012, 1 ether);
-        assertEq(receiver, ROYALTY);
-        assertEq(amount, 0.05 ether);
-    }
-
-    function test_royaltyCap() public {
-        deployWith(OWNER, ROYALTY, 1000);
-        vm.expectRevert(abi.encodeWithSelector(BadBridge.RoyaltyTooHigh.selector, 1001));
-        deployWith(OWNER, ROYALTY, 1001);
-
-        vm.startPrank(OWNER);
-        bridge.setRoyalty(ROYALTY, 1000);
-        vm.expectRevert(abi.encodeWithSelector(BadBridge.RoyaltyTooHigh.selector, 1001));
-        bridge.setRoyalty(ROYALTY, 1001);
-        vm.stopPrank();
-    }
-
-    function test_royaltyZeroReceiverReverts() public {
-        vm.prank(OWNER);
-        vm.expectRevert(abi.encodeWithSignature("ERC2981InvalidDefaultRoyaltyReceiver(address)", address(0)));
-        bridge.setRoyalty(address(0), 500);
-    }
-
-    function test_zeroOwnerReverts() public {
-        vm.expectRevert(abi.encodeWithSignature("OwnableInvalidOwner(address)", address(0)));
-        deployWith(address(0), ROYALTY, 500);
-    }
-
-    function test_onlyOwner() public {
-        address eve = makeAddr("eve");
-        vm.startPrank(eve);
-        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", eve));
-        bridge.setRoyalty(eve, 1000);
-        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", eve));
-        bridge.setContractURI("ipfs://evil");
-        vm.stopPrank();
-    }
-
-    function test_ownershipTwoStep() public {
-        address dao = makeAddr("dao");
-        vm.prank(OWNER);
-        bridge.transferOwnership(dao);
-        assertEq(bridge.owner(), OWNER);
-        assertEq(bridge.pendingOwner(), dao);
-
-        vm.prank(dao);
-        bridge.acceptOwnership();
-        assertEq(bridge.owner(), dao);
-    }
-
-    function test_renounceFreezes() public {
-        vm.prank(OWNER);
-        bridge.renounceOwnership();
-        vm.startPrank(OWNER);
-        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", OWNER));
-        bridge.setRoyalty(ROYALTY, 100);
-        vm.expectRevert(abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", OWNER));
-        bridge.setContractURI("ipfs://new");
-        vm.stopPrank();
-    }
-
-    function test_contractURI() public {
+contract BadBridgeMetadataTest is BadBridgeBase {
+    function test_contractURI() public view {
         assertEq(bridge.contractURI(), "ipfs://c");
-        vm.expectEmit(address(bridge));
-        emit BadBridge.ContractURIUpdated();
-        vm.prank(OWNER);
-        bridge.setContractURI("ipfs://d");
-        assertEq(bridge.contractURI(), "ipfs://d");
-    }
-
-    function test_setRoyaltyEmits() public {
-        vm.expectEmit(address(bridge));
-        emit BadBridge.RoyaltyUpdated(ROYALTY, 500);
-        vm.prank(OWNER);
-        bridge.setRoyalty(ROYALTY, 500);
     }
 
     function test_supportsInterface() public view {
         assertTrue(bridge.supportsInterface(0x01ffc9a7)); // ERC-165
         assertTrue(bridge.supportsInterface(0x80ac58cd)); // ERC-721
         assertTrue(bridge.supportsInterface(0x5b5e139f)); // ERC-721 Metadata
-        assertTrue(bridge.supportsInterface(0x2a55205a)); // ERC-2981
+        assertFalse(bridge.supportsInterface(0x2a55205a)); // ERC-2981, no royalty
         assertFalse(bridge.supportsInterface(0xffffffff));
-    }
-
-    /// Whatever the owner does, bridge state, balances, metadata and votes don't move.
-    function testFuzz_ownerCantTouchBridge(address receiver, uint96 bps, string calldata uri, address newOwner) public {
-        vm.assume(receiver != address(0) && newOwner != address(0));
-        bps = uint96(bound(bps, 0, 1000));
-        address alice = makeAddr("alice");
-        bridge.submitBatch(HEIGHT, cs, proofFor(kv(key(ESCROW, "b", 1), abi.encodePacked(alice))));
-        bridge.submitBatch(HEIGHT, cs, proofFor(kv(key(ESCROW, "b", 2), abi.encodePacked(alice))));
-        bridge.claim(1);
-
-        vm.startPrank(OWNER);
-        bridge.setRoyalty(receiver, bps);
-        bridge.setContractURI(uri);
-        bridge.transferOwnership(newOwner);
-        vm.stopPrank();
-
-        assertEq(bridge.proven(1), alice);
-        assertEq(bridge.proven(2), alice);
-        assertEq(bridge.ownerOf(1), alice);
-        assertEq(bridge.tokenURI(1), "ipfs://x/1");
-        assertEq(bridge.ESCROW(), ESCROW);
-        assertEq(bridge.clientId(), "cosmoshub-0");
-        assertEq(bridge.getVotes(alice), 1);
-        // the unclaimed kid still lands with its recipient
-        bridge.claim(2);
-        assertEq(bridge.ownerOf(2), alice);
     }
 }
 
@@ -639,13 +529,11 @@ contract VotesHandler is Test {
     mapping(uint32 => bool) public isMinted;
     mapping(uint32 => bool) seen;
     uint32[] proven;
-    address owner;
 
-    constructor(BadBridge bridge_, bytes32 root_, bytes32 escrow_, address owner_) {
+    constructor(BadBridge bridge_, bytes32 root_, bytes32 escrow_) {
         bridge = bridge_;
         root = root_;
         escrow = escrow_;
-        owner = owner_;
         for (uint256 i = 0; i < actors.length; ++i) {
             actors[i] = makeAddr(string.concat("actor", vm.toString(i)));
         }
@@ -713,17 +601,6 @@ contract VotesHandler is Test {
         vm.warp(block.timestamp + bound(secs, 1, 1 days));
     }
 
-    // owner actions mixed in, so the invariants also cover "the owner can't move votes or kids"
-    function setRoyalty(uint8 toIdx, uint96 bps) external {
-        vm.prank(owner);
-        bridge.setRoyalty(actors[toIdx % actors.length], uint96(bound(bps, 0, 1000)));
-    }
-
-    function setContractURI(uint256 seed) external {
-        vm.prank(owner);
-        bridge.setContractURI(vm.toString(seed));
-    }
-
     function mintedLength() external view returns (uint256) {
         return minted.length;
     }
@@ -734,7 +611,7 @@ contract BadBridgeVotesInvariantTest is BadBridgeBase {
 
     function setUp() public override {
         super.setUp();
-        handler = new VotesHandler(bridge, cs.root, ESCROW, OWNER);
+        handler = new VotesHandler(bridge, cs.root, ESCROW);
         targetContract(address(handler));
     }
 
