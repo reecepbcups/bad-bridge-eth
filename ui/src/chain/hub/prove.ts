@@ -1,5 +1,5 @@
 // A single escrow record's ICS-23 membership proof, plus the block header needed to rebuild the light
-// client's ConsensusState. Ports batcher/service/src/hub.rs's store_key/prove_at/header, scoped to one
+// client's ConsensusState. Ports the old Rust batcher's store_key/prove_at/header, scoped to one
 // token id: the browser page only ever proves the connected wallet's own kid, never a full batch.
 
 import { fromBase64, fromBech32, fromHex, toHex } from '@cosmjs/encoding'

@@ -6,11 +6,11 @@ One-way NFT bridge, Cosmos Hub cw721 -> Ethereum ERC721. Reuses the IBC Eureka `
 
 1. `send_nft` to the Hub escrow, with your ETH address as the message
 2. Escrow stores a raw record: key `"b" || token_id`, value `<20 byte ETH address>`
-3. Batcher proves that record against the app hash the Eureka client stores, wraps it in a Groth16 proof with SP1
+3. A prover (the UI's "Prove it yourself", from the user's wallet) proves that record against the app hash the Eureka client stores, wraps it in a Groth16 proof with SP1
 4. `BadBridge.submitBatch` verifies the proof and records token id + recipient
 5. Anyone calls `claim(id)`, which mints that id to the recipient
 
-The batcher can't lie, every record is checked on-chain. Worst case it just doesn't submit.
+The prover can't lie, every record is checked on-chain. Worst case nobody submits.
 
 Metadata doesn't move. `tokenURI` is `baseURI + id`, same IPFS folder as the Hub.
 
@@ -20,7 +20,6 @@ Metadata doesn't move. `tokenURI` is `baseURI + id`, same IPFS folder as the Hub
 |-|-|
 |escrow (CosmWasm)|`escrow/`|
 |bridge (`BadBridge.sol`)|`eth/`|
-|batcher (Rust)|[`batcher/service/`](batcher/service/README.md) — running it, persistent proof state, and recovery|
 
 ## Checking it
 

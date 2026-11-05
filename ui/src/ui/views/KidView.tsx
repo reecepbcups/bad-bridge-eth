@@ -119,7 +119,7 @@ function Kid({ id }: { id: KidId }) {
               <ProveButton ids={[id]} expectedRecipients={t.recipient ? new Map([[id, t.recipient]]) : undefined} flow={prove}>
                 Prove it yourself
               </ProveButton>
-              <span className="hint">Normally the batcher proves it for you. This does it now, from your wallet.</span>
+              <span className="hint">Proves it now, from your wallet.</span>
             </div>
           )}
           {!deployment.demo && t.stage === 'proving' && <ProveBalanceNote />}

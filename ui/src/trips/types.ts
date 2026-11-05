@@ -37,7 +37,7 @@ export interface Trip {
    */
   provingSince?: Date
   /**
-   * Seen proving for more than 30 minutes (see provingSince): the batcher looks stuck. Never set while the
+   * Seen proving for more than 30 minutes (see provingSince): no prover has picked it up. Never set while the
    * client is frozen, since then nothing can be proven and the site-wide "paused" state explains it.
    */
   stuck: boolean

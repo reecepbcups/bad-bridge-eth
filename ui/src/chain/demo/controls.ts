@@ -8,13 +8,13 @@ export interface DemoControls {
   snapshot: DemoSnapshot
   /** Jump to the next relay or proof for a sent kid. False if nothing can happen. */
   skip(): boolean
-  /** Move the virtual clock forward, e.g. 30 min to trip the "batcher looks stuck" note. */
+  /** Move the virtual clock forward, e.g. 30 min to trip the stuck-proving note. */
   advance(ms: number): void
   /** Stop or start the virtual clock. */
   setPaused(on: boolean): void
   /** Freeze the light client: no relays or proofs, sends should be disabled, claims still work. */
   setFrozen(on: boolean): void
-  /** Stall the batcher: relays happen, proofs don't. */
+  /** Stall the prover: relays happen, proofs don't. */
   setStuck(on: boolean): void
   /** Fail every read with Network. */
   setOffline(on: boolean): void

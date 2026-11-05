@@ -25,7 +25,7 @@ import { BridgeError, type BatchOptions, type ConsensusStateArgs, type EthAddres
 export type ProveStage = 'finding-proof' | SuccinctStage | 'signing' | 'confirming'
 
 /**
- * bincode(SP1VerifyingKey) for public/membership.elf (batcher/elf/sp1-ics07-tendermint-membership), computed
+ * bincode(SP1VerifyingKey) for public/membership.elf (sp1-ics07-tendermint-membership), computed
  * once offline (2026-09-28) via `ProverClient::builder().mock().build().setup(elf)` — setup() needs no
  * network access, just the ELF, so this never changes unless the ELF does. Verified this session: its
  * bytes32() hash matched the light client's on-chain MEMBERSHIP_PROGRAM_VKEY exactly. If the light client is
@@ -61,7 +61,7 @@ export interface ProveKidsOptions {
   onPrepared?: (height: bigint, consensusState: ConsensusStateArgs) => void
   /**
    * Per-id recipient the caller already believes each kid is headed to (e.g. from useTrip). Checked against
-   * the Hub's own record before proving — the same sanity check the Rust batcher makes (hub.rs's
+   * the Hub's own record before proving — the same sanity check the old Rust batcher made (hub.rs's
    * value-vs-REST cross-check) — since a mismatch means something is lying, not that the record changed.
    */
   expectedRecipients?: ReadonlyMap<KidId, EthAddress>

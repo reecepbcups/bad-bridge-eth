@@ -23,7 +23,7 @@ const cases: [name: string, input: StageInput, want: Stage][] = [
   ['home-eth: minted', { record, sendHeight: HS, client: client(HS + 1), eth: eth(ALICE, ALICE) }, 'home-eth'],
   ['crossing: record but Hs unknown', { record, sendHeight: null, client: client(HS + 1), eth: nothingOnEth }, 'crossing'],
 
-  // the Hs boundary: the batcher proves at H-1, so the client has to pass Hs, not reach it
+  // the Hs boundary: the prover proves at H-1, so the client has to pass Hs, not reach it
   ['client exactly at Hs is still catching-up', { record, sendHeight: HS, client: client(HS), eth: nothingOnEth }, 'catching-up'],
   ['client at Hs + 1 is proving', { record, sendHeight: HS, client: client(HS + 1), eth: nothingOnEth }, 'proving'],
 

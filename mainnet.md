@@ -46,7 +46,6 @@ Royalty isn't in the json on purpose, the contract does ERC2981. Owner can chang
 - [ ] Repeat the unsigned `send_nft` simulation against the intended collection and escrow. The 2026-11-05 audit reached the receiver hook and got the expected wrong-collection rejection from the test escrow; this did not move a real kid
 - [ ] Run the contract tests and real-proof fork test described in `README.md`, and rebuild the escrow artifact below
 - [ ] Rotate `NETWORK_PRIVATE_KEY` (the old prover key leaked into a chat log)
-- [ ] Fresh `ETH_PRIVATE_KEY` for the batcher with some ETH for gas
 - [ ] Recheck the source collection's migration admin and resolve that trust assumption with its owners. The bridge cannot remove the source collection administrator's power to change its code
 - [ ] Record the final Safe, royalty receiver, escrow and bridge addresses. None of these launch actions is completed by running the local test suite
 
@@ -101,21 +100,7 @@ forge script script/Deploy.s.sol --rpc-url https://ethereum-rpc.publicnode.com -
 
 The script logs owner, royalty receiver, wei per 1 ETH and contractURI. Eyeball them before moving on.
 
-### 4. Batcher
-
-```bash
-cd batcher/service
-BRIDGE=<bridge 0x> \
-ESCROW=<escrow cosmos1...> \
-MEMBERSHIP_ELF=../elf/sp1-ics07-tendermint-membership \
-ETH_PRIVATE_KEY=... \
-NETWORK_PRIVATE_KEY=... \
-cargo run --release
-```
-
-Use the `sp1-programs-v2.0.0` ELF, HEAD builds the wrong vkey.
-
-### 5. UI
+### 4. UI
 
 Fill in the `badkids` entry in `ui/src/config/deployments.ts`, it's `hub(cw721, null)` and `eth(null)` right now:
 
@@ -128,7 +113,7 @@ Build the public site with `VITE_DEPLOYMENT=badkids`, then update the Deployment
 
 1. While the public UI remains closed, have the operator send one kid to the escrow with their ETH address as the msg
 2. If the Eureka client is stale, send a little ATOM over Eureka to nudge it (~10 min)
-3. Wait for the batcher to submit
+3. Open the kid in a local UI build and hit "Prove it yourself"
 4. `claim(id)` and check `ownerOf`, `tokenURI` and `royaltyInfo`
 5. Renounce the escrow admin. While it's alive an `EmergencyUnlock` can put the same kid on both chains, even one with no `Proven` event yet, since any old Eureka root still proves the record. Don't unlock the smoke test kid, just renounce
 
