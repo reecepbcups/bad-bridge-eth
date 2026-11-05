@@ -34,7 +34,7 @@ describe('AboutView trust facts', () => {
     const { wrapper } = fakeBridge(chain)
     render(<AboutView />, { wrapper })
 
-    expect(await screen.findByText(/the Eureka router that points to it can be upgraded/)).toBeInTheDocument()
+    expect(await screen.findByText('Emergency unlock is renounced.')).toBeInTheDocument()
     expect(screen.queryByText(/share an admin/)).not.toBeInTheDocument()
   })
 
