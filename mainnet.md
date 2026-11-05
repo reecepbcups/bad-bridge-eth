@@ -67,11 +67,11 @@ Set all three deployment choices explicitly. The script has no collection, admin
 
 ```bash
 export CW721=cosmos12gsv9tmjhhg86wg9fnd9cnju28jx3fxva9cn8dh9meketkfxxajqmg3exz
-export ADMIN=<temporary-admin-cosmos-address>   # both the EmergencyUnlock admin and the CosmWasm admin
+export ADMIN=<temporary-admin-cosmos-address>   # EmergencyUnlock admin only
 export FROM_KEY=<local-gaiad-key-name>
 ```
 
-The internal `ADMIN` can refund tokens until renounced. The script also makes `ADMIN` the CosmWasm admin, so if the smoke test with a real kid goes wrong we can migrate to fixed code instead of leaving it stuck. Clear the CosmWasm admin and renounce the internal admin after the operator smoke test and **before enabling public deposits**. The UI won't send while either one exists, so the smoke test send goes through `gaiad`. Keep the public UI closed throughout deployment and smoke testing.
+The internal `ADMIN` can refund tokens until renounced. There's no CosmWasm admin (`--no-admin`), so the code can never be migrated. Renounce the internal admin after the operator smoke test and **before enabling public deposits**. The UI won't send while it exists, so the smoke test send goes through `gaiad`. Keep the public UI closed throughout deployment and smoke testing.
 
 ```bash
 gaiad tx wasm store escrow/artifacts/bad_bridge_escrow.wasm \
@@ -81,7 +81,7 @@ gaiad tx wasm store escrow/artifacts/bad_bridge_escrow.wasm \
 scripts/instantiate-escrow.sh <code-id> bad-kids-escrow
 ```
 
-Before instantiation, query the uploaded code's checksum and compare it to `escrow/artifacts/checksums.txt`. After instantiation, confirm the configured collection and that the CosmWasm admin is `ADMIN` on chain.
+Before instantiation, query the uploaded code's checksum and compare it to `escrow/artifacts/checksums.txt`. After instantiation, confirm the configured collection, that the internal admin is `ADMIN`, and that the CosmWasm admin is empty on chain.
 
 ### 2. Escrow address as bytes32
 
@@ -120,19 +120,15 @@ gaiad tx wasm execute <cw721 cosmos1...> '{"send_nft":{"contract":"<escrow cosmo
 2. If the Eureka client is stale, send a little ATOM over Eureka to nudge it (~10 min)
 3. Open the kid in a local UI build and hit "Prove it yourself"
 4. `claim(id)` and check `ownerOf`, `tokenURI` and `contractURI`
-5. If the kid didn't land, migrate the escrow to fixed code (`gaiad tx wasm migrate`) and go again. Only move on once a real kid has crossed
-6. Renounce the escrow admin and clear the CosmWasm admin. While it's alive an `EmergencyUnlock` can put the same kid on both chains, even one with no `Proven` event yet, since any old Eureka root still proves the record. Don't unlock the smoke test kid, just renounce
+5. If the kid didn't land, `EmergencyUnlock` it back, fix, and deploy a new escrow and bridge. Only move on once a real kid has crossed
+6. Renounce the escrow admin. While it's alive an `EmergencyUnlock` can put the same kid on both chains, even one with no `Proven` event yet, since any old Eureka root still proves the record. Don't unlock the smoke test kid, just renounce
 
 ```bash
 gaiad tx wasm execute <escrow cosmos1...> '{"renounce_admin":{}}' \
   --from <admin-key-name> --chain-id cosmoshub-4 --gas auto --gas-adjustment 1.3 --gas-prices 0.005uatom \
   --node https://cosmos-rpc.polkachu.com:443 -y
-
-gaiad tx wasm clear-contract-admin <escrow cosmos1...> \
-  --from <admin-key-name> --chain-id cosmoshub-4 --gas auto --gas-adjustment 1.3 --gas-prices 0.005uatom \
-  --node https://cosmos-rpc.polkachu.com:443 -y
 ```
 
-Verify that raw escrow storage key `admin` is absent (`61646d696e` in hex), and separately that the contract's CosmWasm migration admin is empty. Simulating another `renounce_admin` from the former admin must fail with `unauthorized`; there is no need to pay for a second transaction. Only then enable public deposits.
+Verify that raw escrow storage key `admin` is absent (`61646d696e` in hex), and that the contract's CosmWasm migration admin is still empty. Simulating another `renounce_admin` from the former admin must fail with `unauthorized`; there is no need to pay for a second transaction. Only then enable public deposits.
 
 The Ethereum bridge permanently pins its light client. A retired, expired or frozen client can stop unfinished transfers; deploying another client alone does not update this bridge. Check the client's health and router mapping before opening deposits. Do not use EmergencyUnlock after any stored Hub root could prove the record, even if no Ethereum `Proven` event exists yet.
