@@ -64,7 +64,7 @@ Only `check` and `test:e2e` are hermetic. The three live ones depend on public R
 
 Host it only on an origin of its own: a dedicated domain or subdomain, or a subdomain IPFS gateway (`<cid>.ipfs.dweb.link`). On a path-based gateway (`ipfs.io/ipfs/<cid>/`, `gateway.pinata.cloud/ipfs/…`) or a GitHub project page (`user.github.io/repo/`), every other page on that origin can script this one and reuse the wallets' permissions for it. The app detects those hosts (`src/config/host.ts`) and switches Send off there, with a note saying why.
 
-Headers to set, once each wallet has been tried against them with `Content-Security-Policy-Report-Only` first. No meta CSP ships yet: hosting is undecided, and it needs testing with every wallet.
+Headers to set, once each wallet has been tried against them with `Content-Security-Policy-Report-Only` first. `vercel.json` sets all of these, but the CSP is only `Content-Security-Policy-Report-Only` until it's been tested with every wallet. Swap the key to `Content-Security-Policy` after that.
 
 ```
 Content-Security-Policy:
@@ -101,8 +101,10 @@ Succinct's S3 bucket has no CORS, so the browser can't upload the stdin/ELF or d
 
 TODO before launch:
 
-- [ ] Vercel project root dir = `ui`
-- [ ] env `VITE_DEPLOYMENT=badkids` and `VITE_ARTIFACT_PROXY_URL=/api` (no trailing slash)
+- [ ] import the GitHub repo in Vercel, root dir = `ui`. Build, install and headers come from `vercel.json`
+- [ ] env `VITE_ARTIFACT_PROXY_URL=/api` (no trailing slash) for all envs, `VITE_DEPLOYMENT=badkids` for Production, `reece-test` for Preview
+- [ ] Settings -> Node.js Version = 24.x (`engines` wants >=24)
+- [ ] Domains: add `badkidsbridge.com`, plus `www.badkidsbridge.com` redirecting to it
 - [ ] preview deploy with `reece-test`, run "Prove it yourself" once end to end. The bucket hostname came from a comment, not a real proof URL, so this is the actual check
 
 #### If proving breaks on the live site
