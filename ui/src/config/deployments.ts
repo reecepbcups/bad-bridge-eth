@@ -70,6 +70,8 @@ export interface Deployment {
   explorer: Explorers
   /** The bridge's source code, linked from About and the error page. */
   sourceUrl: string
+  /** Sourcify page for the verified bridge. null when not verified. */
+  verifiedUrl: string | null
 }
 
 const HUB_REST = ['https://cosmos-rest.publicnode.com'] as const
@@ -141,6 +143,7 @@ const reeceTest: Deployment = {
   eth: eth(REECE_TEST_BRIDGE),
   explorer: explorers(REECE_TEST_BRIDGE),
   sourceUrl: SOURCE,
+  verifiedUrl: null,
 }
 
 const BADKIDS_TEST_BRIDGE: Address = '0x55AeBB496F306B650048151Fe9019D81819C6F47'
@@ -158,6 +161,7 @@ const badkidsTest: Deployment = {
   eth: eth(BADKIDS_TEST_BRIDGE),
   explorer: explorers(BADKIDS_TEST_BRIDGE),
   sourceUrl: SOURCE,
+  verifiedUrl: null,
 }
 
 const BADKIDS_BRIDGE: Address = '0x496f8D31eF5576A3f7057572829a74a90cF39E9a'
@@ -175,6 +179,7 @@ const badkids: Deployment = {
   eth: eth(BADKIDS_BRIDGE),
   explorer: explorers(BADKIDS_BRIDGE),
   sourceUrl: SOURCE,
+  verifiedUrl: 'https://repo.sourcify.dev/1/0x496f8d31ef5576a3f7057572829a74a90cf39e9a',
 }
 
 /** In-memory adapter replaying the mockup's example wallet. Shows the test contracts on About, like the mockup. */
