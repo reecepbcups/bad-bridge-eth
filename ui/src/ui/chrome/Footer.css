@@ -1,2 +1,4 @@
 .footer { font-size: 13.5px; color: var(--ink-soft); display: grid; gap: 4px; }
 .footer b { color: var(--ink); }
+.footer .mono { overflow-wrap: anywhere; }
+.footer .verified { color: var(--ok-ink); font-weight: 700; text-decoration: underline; }
