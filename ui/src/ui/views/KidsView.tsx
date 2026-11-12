@@ -387,7 +387,7 @@ export function TripRow({
           </ProveButton>
         )}
         {token && (
-          <ExtLink className="btn ghost" href={token} aria-label={`View #${trip.tokenId} on Etherscan`}>
+          <ExtLink className="btn ghost" href={token} aria-label={`View #${trip.tokenId} on Blockscout`}>
             View
           </ExtLink>
         )}

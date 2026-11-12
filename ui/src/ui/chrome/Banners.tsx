@@ -1,9 +1,12 @@
 import { describeConfigProblem, useConfigSanity, useHealth } from '../../trips/hooks'
 import type { ConfigProblem } from '../../trips/types'
+import { ExtLink } from '../ExtLink'
 import { shortAddress } from '../format'
 import './Banners.css'
 
-/** Site-wide notices: the light client is frozen, or the contracts don't match this site's settings. */
+const SECURITY_POLICY = 'https://github.com/reecepbcups/bad-bridge-eth/blob/main/SECURITY.md'
+
+/** Site-wide notices: the light client is frozen, the contracts don't match this site's settings, or the pre-renounce bounty. */
 export function Banners() {
   const health = useHealth()
   const sanity = useConfigSanity()
@@ -37,18 +40,16 @@ export function Banners() {
           </ul>
         </div>
       )}
+      {/* escrow admins still around means renouncing hasn't happened yet, so the bounty is open */}
       {warnings.length > 0 && (
         <div className="banner warn" role="status">
-          <b>The escrow still has admins</b>
+          <b>Bug bounty: break it before we lock it</b>
           <span>
-            Sending works, but these powers haven't been given up yet. Only send if you trust them.
-            {/* COPY: escrow admin banner */}
+            Before the escrow admin is renounced, find a vulnerability in the bridge and win a Bad Kid plus 0.05 ETH
+            (about $100). Report it privately, see the{' '}
+            <ExtLink href={SECURITY_POLICY}>security policy</ExtLink>.
+            {/* COPY: bounty banner */}
           </span>
-          <ul>
-            {warnings.map((p, i) => (
-              <li key={`${p.code}-${i}`}>{describe(p)}</li>
-            ))}
-          </ul>
         </div>
       )}
     </div>

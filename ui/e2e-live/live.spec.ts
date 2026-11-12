@@ -63,7 +63,7 @@ test.afterEach(() => {
 })
 
 for (const id of KIDS_HOME) {
-  test(`#${id} is home on Ethereum, owned by the recipient, with Etherscan and OpenSea links`, async ({ page }, testInfo) => {
+  test(`#${id} is home on Ethereum, owned by the recipient, with Blockscout and OpenSea links`, async ({ page }, testInfo) => {
     await page.goto(`./#/kid/${id}`)
     const main = page.getByRole('main')
     await expect(main.getByRole('heading', { level: 2, name: `#${id}` })).toBeVisible()
@@ -78,7 +78,7 @@ for (const id of KIDS_HOME) {
       'href',
       `https://www.mintscan.io/cosmos/address/${REECE}`,
     )
-    await expect(main.getByRole('link', { name: /^Etherscan/ })).toHaveAttribute('href', `https://etherscan.io/nft/${BRIDGE}/${id}`)
+    await expect(main.getByRole('link', { name: /^Blockscout/ })).toHaveAttribute('href', `https://eth.blockscout.com/token/${BRIDGE}/instance/${id}`)
     await expect(main.getByRole('link', { name: /^OpenSea/ })).toHaveAttribute('href', `https://opensea.io/assets/ethereum/${BRIDGE}/${id}`)
     // all four steps done
     await expect(main.locator('ol.stages li.done')).toHaveCount(4)
@@ -91,7 +91,7 @@ test(`#${KID_ON_HUB} is still on the Hub`, async ({ page }, testInfo) => {
   const main = page.getByRole('main')
   await expect(main.getByText('on the Hub', { exact: true })).toBeVisible()
   await expect(main.getByText("Still on the Cosmos Hub. It hasn't been sent across.")).toBeVisible()
-  await expect(main.getByRole('link', { name: /^Etherscan/ })).toHaveCount(0)
+  await expect(main.getByRole('link', { name: /^Blockscout/ })).toHaveCount(0)
   await expect(main.locator('dl.facts dt')).toHaveCount(0)
   await screenshot(page, testInfo, `kid-${KID_ON_HUB}`)
 })
@@ -103,7 +103,7 @@ async function expectKidsHome(page: Page): Promise<void> {
     const row = list.getByRole('listitem').filter({ has: page.getByRole('link', { name: `#${id}`, exact: true }) })
     await expect(row).toHaveCount(1)
     await expect(row.getByText('home on Ethereum', { exact: true })).toBeVisible()
-    await expect(row.getByRole('link', { name: `View #${id} on Etherscan` })).toHaveAttribute('href', `https://etherscan.io/nft/${BRIDGE}/${id}`)
+    await expect(row.getByRole('link', { name: `View #${id} on Blockscout` })).toHaveAttribute('href', `https://eth.blockscout.com/token/${BRIDGE}/instance/${id}`)
   }
   await expect(page.getByText(/^\d+ home$/)).toBeVisible()
 }

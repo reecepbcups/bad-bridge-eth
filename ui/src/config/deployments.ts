@@ -49,7 +49,7 @@ export interface Explorers {
   hubContract(address: string): string
   ethTx(hash: string): string
   ethAddress(address: string): string
-  /** Etherscan page for one bridged kid. null until the bridge exists. */
+  /** Blockscout page for one bridged kid. null until the bridge exists. */
   ethToken(tokenId: number): string | null
   /** OpenSea page for one bridged kid. null until the bridge exists. */
   opensea(tokenId: number): string | null
@@ -70,7 +70,7 @@ export interface Deployment {
   explorer: Explorers
   /** The bridge's source code, linked from About and the error page. */
   sourceUrl: string
-  /** Sourcify page for the verified bridge. null when not verified. */
+  /** Blockscout page for the verified bridge. null when not verified. */
   verifiedUrl: string | null
 }
 
@@ -92,9 +92,9 @@ function explorers(bridge: Address | null): Explorers {
     hubTx: (hash) => `https://www.mintscan.io/cosmos/tx/${hash}`,
     hubAccount: (address) => `https://www.mintscan.io/cosmos/address/${address}`,
     hubContract: (address) => `https://www.mintscan.io/cosmos/wasm/contract/${address}`,
-    ethTx: (hash) => `https://etherscan.io/tx/${hash}`,
-    ethAddress: (address) => `https://etherscan.io/address/${address}`,
-    ethToken: (tokenId) => (bridge ? `https://etherscan.io/nft/${bridge}/${tokenId}` : null),
+    ethTx: (hash) => `https://eth.blockscout.com/tx/${hash}`,
+    ethAddress: (address) => `https://eth.blockscout.com/address/${address}`,
+    ethToken: (tokenId) => (bridge ? `https://eth.blockscout.com/token/${bridge}/instance/${tokenId}` : null),
     opensea: (tokenId) => (bridge ? `https://opensea.io/assets/ethereum/${bridge}/${tokenId}` : null),
     openseaCollection: () => (bridge ? `https://opensea.io/assets/ethereum/${bridge}` : null),
   }
@@ -179,7 +179,7 @@ const badkids: Deployment = {
   eth: eth(BADKIDS_BRIDGE),
   explorer: explorers(BADKIDS_BRIDGE),
   sourceUrl: SOURCE,
-  verifiedUrl: 'https://repo.sourcify.dev/1/0x496f8d31ef5576a3f7057572829a74a90cf39e9a',
+  verifiedUrl: 'https://eth.blockscout.com/address/0x496f8D31eF5576A3f7057572829a74a90cF39E9a?tab=contract',
 }
 
 /** In-memory adapter replaying the mockup's example wallet. Shows the test contracts on About, like the mockup. */

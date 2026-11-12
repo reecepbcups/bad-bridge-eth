@@ -1,0 +1,8 @@
+.contract-bar {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
+  font-size: 13.5px; color: var(--ink-soft);
+}
+.contract-bar .mono { overflow-wrap: anywhere; }
+.contract-bar .verified { color: var(--ok-ink); font-weight: 700; text-decoration: underline; }
+.contract-bar .opensea { display: inline-flex; align-items: center; gap: 6px; }
+.contract-bar .opensea svg { flex: none; }

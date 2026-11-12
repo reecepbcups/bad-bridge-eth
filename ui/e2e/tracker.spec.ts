@@ -42,7 +42,7 @@ test('look up an address, then claim everything that is ready in one tx', async 
 
   await page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'My Eth kids' }).click()
   for (const id of [8073, 8783, 9254]) await expect(row(id).getByText('home on Ethereum', { exact: true })).toBeVisible()
-  await expect(row(8073).getByRole('link', { name: 'View #8073 on Etherscan' })).toHaveAttribute('href', `https://etherscan.io/nft/${BRIDGE}/8073`)
+  await expect(row(8073).getByRole('link', { name: 'View #8073 on Blockscout' })).toHaveAttribute('href', `https://eth.blockscout.com/token/${BRIDGE}/instance/8073`)
   // share link
   await page.getByRole('button', { name: 'Copy share link' }).click()
   await expect(page.getByRole('button', { name: 'Copied!' })).toBeVisible()
@@ -120,7 +120,7 @@ test('About lists the contracts from the deployment, with live health', async ({
     'href',
     'https://www.mintscan.io/cosmos/wasm/contract/cosmos1rce3kmvc2v955f64gp8cjtwqzma3qg8t4puk7swmqd56j25gfqgq3s8037',
   )
-  await expect(contracts.getByRole('link', { name: BRIDGE })).toHaveAttribute('href', `https://etherscan.io/address/${BRIDGE}`)
+  await expect(contracts.getByRole('link', { name: BRIDGE })).toHaveAttribute('href', `https://eth.blockscout.com/address/${BRIDGE}`)
   await expect(contracts.getByRole('link', { name: '0x4bB8A05D5b40dF7a3B97770E1943461B681B62E9' })).toBeVisible()
   await expect(contracts.getByText('Bad Kids (Cosmos Hub)')).toBeVisible()
   await expect(contracts.getByRole('link', { name: 'github.com/reecepbcups/bad-bridge' })).toBeVisible()

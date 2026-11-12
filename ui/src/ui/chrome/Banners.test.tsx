@@ -51,7 +51,7 @@ describe('Banners', () => {
     expect(alert).toHaveTextContent('The bridge trusts another escrow.')
   })
 
-  it('flags escrow admins without switching sending off', () => {
+  it('shows the bounty while the escrow still has admins, without switching sending off', () => {
     hooks.health = state(health(false))
     hooks.sanity = state<ConfigSanity>({
       ok: true,
@@ -61,8 +61,8 @@ describe('Banners', () => {
     })
     render(<Banners />)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('The escrow still has admins')
-    expect(screen.getByRole('status')).toHaveTextContent('The escrow still has an emergency unlock admin.')
+    expect(screen.getByRole('status')).toHaveTextContent('Bug bounty')
+    expect(screen.getByRole('link', { name: /security policy/ })).toHaveAttribute('href', 'https://github.com/reecepbcups/bad-bridge-eth/blob/main/SECURITY.md')
   })
 
   it('leaves "not live yet" to the pick screen', () => {
