@@ -179,7 +179,7 @@ function Kid({ id }: { id: KidId }) {
             <div className="row start">
               {token && (
                 <ExtLink className="btn ghost" href={token}>
-                  Etherscan
+                  Blockscout
                 </ExtLink>
               )}
               {opensea && (

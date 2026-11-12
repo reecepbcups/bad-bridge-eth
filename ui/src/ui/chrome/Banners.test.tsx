@@ -8,6 +8,10 @@ import { Banners } from './Banners'
 const state = <T,>(data: T | undefined): QueryState<T> => ({ data, error: null, isLoading: false, isFetching: false, refetch: () => undefined })
 const hooks = vi.hoisted((): { health: unknown; sanity: unknown } => ({ health: undefined, sanity: undefined }))
 
+vi.mock('../../chain/context', () => ({
+  useBridge: () => ({ deployment: { sourceUrl: 'https://github.com/example/repo' } }),
+}))
+
 vi.mock('../../trips/hooks', () => ({
   useHealth: () => hooks.health,
   useConfigSanity: () => hooks.sanity,
@@ -51,7 +55,7 @@ describe('Banners', () => {
     expect(alert).toHaveTextContent('The bridge trusts another escrow.')
   })
 
-  it('flags escrow admins without switching sending off', () => {
+  it('shows the bounty while the escrow still has admins, without switching sending off', () => {
     hooks.health = state(health(false))
     hooks.sanity = state<ConfigSanity>({
       ok: true,
@@ -61,8 +65,8 @@ describe('Banners', () => {
     })
     render(<Banners />)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('The escrow still has admins')
-    expect(screen.getByRole('status')).toHaveTextContent('The escrow still has an emergency unlock admin.')
+    expect(screen.getByRole('status')).toHaveTextContent('Bug bounty')
+    expect(screen.getByRole('link', { name: /GitHub security advisory/ })).toHaveAttribute('href', 'https://github.com/example/repo/security/advisories/new')
   })
 
   it('leaves "not live yet" to the pick screen', () => {

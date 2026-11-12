@@ -80,7 +80,7 @@ test('happy path: connect both wallets, send two kids, cross, and batch claim', 
   for (const id of [9176, 6413]) {
     const row = page.getByRole('listitem').filter({ hasText: `#${id}` })
     await expect(row.getByText('home on Ethereum', { exact: true })).toBeVisible()
-    await expect(row.getByRole('link', { name: `View #${id} on Etherscan` })).toHaveAttribute('href', `https://etherscan.io/nft/${BRIDGE}/${id}`)
+    await expect(row.getByRole('link', { name: `View #${id} on Blockscout` })).toHaveAttribute('href', `https://eth.blockscout.com/token/${BRIDGE}/instance/${id}`)
   }
   await page.getByRole('navigation', { name: 'Sections' }).getByRole('link', { name: 'Bridge a kid' }).click()
   for (const id of [9176, 6413]) await expect(page.getByRole('button', { name: new RegExp(`^#${id} on the Hub`) })).toHaveCount(0)

@@ -17,7 +17,7 @@ export function claimedToast(ids: readonly KidId[], txHash: string, explorer: Ex
     tone: 'ok',
     title: `Claimed ${ids.length > 3 ? `${ids.length} kids` : kidList(ids)}`,
     body: 'Minted on Ethereum. Welcome home.',
-    link: { href: explorer.ethTx(txHash), label: 'See it on Etherscan' },
+    link: { href: explorer.ethTx(txHash), label: 'See it on Blockscout' },
   }
 }
 

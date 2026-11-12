@@ -15,13 +15,13 @@ describe('formatEth', () => {
 })
 
 describe('claimedToast', () => {
-  it('is the same everywhere: kids in the order given, one body, an Etherscan link', () => {
+  it('is the same everywhere: kids in the order given, one body, a Blockscout link', () => {
     const explorer = DEPLOYMENTS['reece-test'].explorer
     expect(claimedToast([9176, 6413], '0xabc', explorer)).toEqual({
       tone: 'ok',
       title: 'Claimed #9176 & #6413',
       body: 'Minted on Ethereum. Welcome home.',
-      link: { href: 'https://etherscan.io/tx/0xabc', label: 'See it on Etherscan' },
+      link: { href: 'https://eth.blockscout.com/tx/0xabc', label: 'See it on Blockscout' },
     })
     expect(claimedToast([1, 2, 3, 4], '0xabc', explorer).title).toBe('Claimed 4 kids')
   })
