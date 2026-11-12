@@ -8,10 +8,6 @@ import { Banners } from './Banners'
 const state = <T,>(data: T | undefined): QueryState<T> => ({ data, error: null, isLoading: false, isFetching: false, refetch: () => undefined })
 const hooks = vi.hoisted((): { health: unknown; sanity: unknown } => ({ health: undefined, sanity: undefined }))
 
-vi.mock('../../chain/context', () => ({
-  useBridge: () => ({ deployment: { sourceUrl: 'https://github.com/example/repo' } }),
-}))
-
 vi.mock('../../trips/hooks', () => ({
   useHealth: () => hooks.health,
   useConfigSanity: () => hooks.sanity,
@@ -66,7 +62,7 @@ describe('Banners', () => {
     render(<Banners />)
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Bug bounty')
-    expect(screen.getByRole('link', { name: /GitHub security advisory/ })).toHaveAttribute('href', 'https://github.com/example/repo/security/advisories/new')
+    expect(screen.getByRole('link', { name: /security policy/ })).toHaveAttribute('href', 'https://github.com/reecepbcups/bad-bridge-eth/blob/main/SECURITY.md')
   })
 
   it('leaves "not live yet" to the pick screen', () => {

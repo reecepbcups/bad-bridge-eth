@@ -1,13 +1,13 @@
-import { useBridge } from '../../chain/context'
 import { describeConfigProblem, useConfigSanity, useHealth } from '../../trips/hooks'
 import type { ConfigProblem } from '../../trips/types'
 import { ExtLink } from '../ExtLink'
 import { shortAddress } from '../format'
 import './Banners.css'
 
+const SECURITY_POLICY = 'https://github.com/reecepbcups/bad-bridge-eth/blob/main/SECURITY.md'
+
 /** Site-wide notices: the light client is frozen, the contracts don't match this site's settings, or the pre-renounce bounty. */
 export function Banners() {
-  const { deployment } = useBridge()
   const health = useHealth()
   const sanity = useConfigSanity()
   const frozen = health.data?.frozen === true
@@ -46,8 +46,8 @@ export function Banners() {
           <b>Bug bounty: break it before we lock it</b>
           <span>
             Before the escrow admin is renounced, find a vulnerability in the bridge and win a Bad Kid plus 0.05 ETH
-            (about $100). Report it privately with a{' '}
-            <ExtLink href={`${deployment.sourceUrl}/security/advisories/new`}>GitHub security advisory</ExtLink>.
+            (about $100). Report it privately, see the{' '}
+            <ExtLink href={SECURITY_POLICY}>security policy</ExtLink>.
             {/* COPY: bounty banner */}
           </span>
         </div>
