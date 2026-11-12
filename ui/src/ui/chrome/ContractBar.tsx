@@ -1,8 +1,9 @@
 import { useBridge } from '../../chain/context'
 import { ExtLink } from '../ExtLink'
+import { shortAddress } from '../format'
 import './ContractBar.css'
 
-/** Top of every page: the bridge contract, its verified source, and the collection on OpenSea. */
+/** Pinned to the bottom of the screen on every page: the bridge contract, its verified source, and the collection on OpenSea. */
 export function ContractBar() {
   const { deployment } = useBridge()
   const { eth, explorer, verifiedUrl } = deployment
@@ -10,25 +11,28 @@ export function ContractBar() {
   const opensea = explorer.openseaCollection()
   return (
     <div className="contract-bar">
-      <span>
-        Bridge contract{' '}
-        <ExtLink className="mono" href={explorer.ethAddress(eth.bridge)}>
-          {eth.bridge}
-        </ExtLink>
-        {verifiedUrl && (
-          <>
-            {' '}·{' '}
-            <ExtLink className="verified" href={verifiedUrl}>
-              VERIFIED
-            </ExtLink>
-          </>
+      <div className="contract-bar-inner">
+        <span>
+          Bridge contract{' '}
+          <ExtLink className="mono" href={explorer.ethAddress(eth.bridge)}>
+            <span className="full">{eth.bridge}</span>
+            <span className="short">{shortAddress(eth.bridge)}</span>
+          </ExtLink>
+          {verifiedUrl && (
+            <>
+              {' '}·{' '}
+              <ExtLink className="verified" href={verifiedUrl}>
+                VERIFIED
+              </ExtLink>
+            </>
+          )}
+        </span>
+        {opensea && (
+          <ExtLink className="btn ghost small opensea" href={opensea} aria-label={`${deployment.collectionName} on OpenSea`}>
+            <OpenSeaLogo /> OpenSea
+          </ExtLink>
         )}
-      </span>
-      {opensea && (
-        <ExtLink className="btn ghost small opensea" href={opensea} aria-label={`${deployment.collectionName} on OpenSea`}>
-          <OpenSeaLogo /> OpenSea
-        </ExtLink>
-      )}
+      </div>
     </div>
   )
 }
