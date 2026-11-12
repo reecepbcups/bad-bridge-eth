@@ -13,7 +13,7 @@ export function ContractBar() {
     <div className="contract-bar">
       <div className="contract-bar-inner">
         <span>
-          Bridge contract{' '}
+          Bridge<span className="full"> contract</span>{' '}
           <ExtLink className="mono" href={explorer.ethAddress(eth.bridge)}>
             <span className="full">{eth.bridge}</span>
             <span className="short">{shortAddress(eth.bridge)}</span>
@@ -29,7 +29,8 @@ export function ContractBar() {
         </span>
         {opensea && (
           <ExtLink className="btn ghost small opensea" href={opensea} aria-label={`${deployment.collectionName} on OpenSea`}>
-            <OpenSeaLogo /> OpenSea
+            <OpenSeaLogo />
+            <span className="full">OpenSea</span>
           </ExtLink>
         )}
       </div>
