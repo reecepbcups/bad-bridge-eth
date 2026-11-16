@@ -165,6 +165,8 @@ export interface EthReader {
   clientSafety(): Promise<ClientSafety>
   /** proven(id) and ownerOf(id) for every id, batched. Every requested id is a key in the map. */
   kidStatus(ids: readonly KidId[]): Promise<Map<KidId, KidEthStatus>>
+  /** Kids Blockscout says `owner` holds. Candidates only: the index can lag, so confirm with kidStatus. */
+  kidsHeldBy(owner: EthAddress): Promise<KidId[]>
   /** True if `address` has code, so the UI can warn before minting to a contract. */
   isContract(address: EthAddress): Promise<boolean>
   /** bridge.ESCROW(): the raw 32-byte escrow address as 0x hex, for the startup sanity check. */

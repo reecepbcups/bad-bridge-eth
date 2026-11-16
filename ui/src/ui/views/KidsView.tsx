@@ -35,14 +35,16 @@ export function KidsView({ address, mode }: { address?: string; mode: KidsMode }
   const connectedHub = hubWallet.status === 'connected' ? hubWallet.address : undefined
 
   const lookup: Lookup | null = address ? parseLookup(address, deployment.hub.bech32Prefix, deployment.collectionSize) : null
+  // home tab: who holds a kid now, not who it was sent to (it may have been sold or given away since)
+  const holder = mode === 'home' ? (lookup ? (lookup.kind === 'eth' ? lookup.address : undefined) : connectedEth) : undefined
   const query: TripQuery = lookup
     ? lookup.kind === 'eth'
-      ? { eth: lookup.address }
+      ? { eth: lookup.address, owner: holder }
       : lookup.kind === 'hub'
         ? { hub: lookup.address }
         : {}
-    : { eth: connectedEth, hub: connectedHub, ids: remembered.length > 0 ? remembered : undefined }
-  const active = Boolean(query.eth || query.hub || query.ids?.length)
+    : { eth: connectedEth, owner: holder, hub: connectedHub, ids: remembered.length > 0 ? remembered : undefined }
+  const active = Boolean(query.eth || query.owner || query.hub || query.ids?.length)
   const trips = useTrips(query, { live: mode === 'crossing' })
   const health = useHealth()
   const flow = useClaimFlow()
@@ -64,7 +66,10 @@ export function KidsView({ address, mode }: { address?: string; mode: KidsMode }
 
   const all = trips.data ?? []
   const onBridge = all.filter((t) => t.stage !== 'home-eth' && t.stage !== 'home-hub')
-  const list = mode === 'crossing' ? onBridge : all.filter((t) => t.stage === 'home-eth')
+  const list =
+    mode === 'crossing'
+      ? onBridge
+      : all.filter((t) => t.stage === 'home-eth' && (!holder || t.owner?.toLowerCase() === holder.toLowerCase()))
   useFocusWhenDone(flow.pending, mode === 'crossing' && claimed.length > 0 && claimed.every((id) => !list.some((t) => t.tokenId === id)), heading)
   const ready = list.filter((t) => t.stage === 'ready')
   const claimableNow = ready.slice(0, CLAIM_BATCH_CAP)
@@ -152,6 +157,8 @@ export function KidsView({ address, mode }: { address?: string; mode: KidsMode }
                     Nothing home yet. Send one from <a href="#/">Bridge a kid</a>.
                   </>
                 )
+              ) : holder ? (
+                'This address holds no kids on Ethereum.'
               ) : (
                 'Nothing has been sent to or from this address.'
               )}

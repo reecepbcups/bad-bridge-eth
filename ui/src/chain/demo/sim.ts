@@ -294,6 +294,10 @@ export class DemoSim {
     return new Map(ids.map((id) => [id, { proven: this.proven.get(id) ?? null, owner: this.ethOwners.get(id) ?? null }]))
   }
 
+  ethOwnedKids(owner: EthAddress): KidId[] {
+    return [...this.ethOwners].filter(([, o]) => o.toLowerCase() === owner.toLowerCase()).map(([id]) => id).sort((a, b) => a - b)
+  }
+
   isContract(address: EthAddress): boolean {
     return seed.CONTRACTS.some((c) => c.toLowerCase() === address.toLowerCase())
   }

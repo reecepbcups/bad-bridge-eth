@@ -40,7 +40,7 @@ a { color: var(--eth-ink); text-decoration-thickness: 2px; text-underline-offset
   background: var(--paper);
 }
 h2 { font: 700 34px/1 var(--display); margin: 0; text-wrap: balance; }
-.lede { margin: -12px 0 0; color: var(--ink-soft); max-width: 58ch; }
+.lede { margin: -4px 0 0; color: var(--ink-soft); max-width: 58ch; }
 .hl { background: linear-gradient(transparent 55%, var(--sun) 55%, var(--sun) 88%, transparent 88%); color: var(--sun-ink); padding: 0 2px; }
 /* on the chalkboard the half-highlight leaves dark text on dark paper: fill the whole word instead */
 @media (prefers-color-scheme: dark) {

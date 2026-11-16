@@ -64,6 +64,8 @@ export interface Health {
 export interface TripQuery {
   /** Every kid whose escrow record points at this Ethereum address. */
   eth?: EthAddress
+  /** Every kid this Ethereum address holds now, however it got there. */
+  owner?: EthAddress
   /** Every kid this Hub address sent. */
   hub?: HubAddress
   /** These kids, whatever their state. */

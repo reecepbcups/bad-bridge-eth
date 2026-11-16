@@ -106,6 +106,21 @@ describe('useTrips discovery', () => {
     ])
   })
 
+  it('finds every kid an Ethereum address holds now, however it got there', async () => {
+    const { wrapper } = fakeBridge(everyStage())
+    const { result } = renderHook(() => useTrips({ owner: BOB }), { wrapper })
+    // 4 was sent to ALICE and sold to BOB
+    expect(stages(await loaded(result))).toEqual([[4, 'home-eth']])
+  })
+
+  it("drops a kid the index still lists but ownerOf says has moved on", async () => {
+    const { wrapper, eth } = fakeBridge(everyStage())
+    eth.kidsHeldBy.mockResolvedValue([3, 4])
+    const { result } = renderHook(() => useTrips({ owner: ALICE }), { wrapper })
+    // 3 isn't minted, 4 belongs to BOB now
+    expect(stages(await loaded(result))).toEqual([])
+  })
+
   it('finds every send by a Hub address, without re-reading what tx search returned', async () => {
     const { wrapper, hub } = fakeBridge(everyStage())
     const { result } = renderHook(() => useTrips({ hub: HUB_B }), { wrapper })

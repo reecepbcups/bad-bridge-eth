@@ -4,6 +4,7 @@ import {
   toBridgeError,
   type ClientStatus,
   type EscrowRecord,
+  type EthAddress,
   type EthReader,
   type HubBlock,
   type HubReader,
@@ -337,12 +338,13 @@ export function seededTrip(ctx: Ctx, id: KidId, send: SendInfo, sentAt: Date): T
 
 // ---- discovery ----
 
-type Source = 'eth' | 'hub' | 'ids' | 'eth-memory' | 'hub-memory'
+type Source = 'eth' | 'owner' | 'hub' | 'ids' | 'eth-memory' | 'hub-memory'
 
 /**
  * Trips for a TripQuery: the union of every part, deduped by token id, sorted by compareTrips.
  * - eth: every escrow record for that recipient (case-insensitive), plus trips this browser remembers
  *   sending there (kept only if the chain agrees on the recipient).
+ * - owner: every kid the index says that address holds (kept only if ownerOf agrees).
  * - hub: every send by that address (tx search), plus remembered sends from it (kept only if the send agrees).
  * - ids: those kids, whatever their state.
  * If some sources fail, the rest still load and the failure comes back beside them; if all fail, it throws.
@@ -380,6 +382,22 @@ export async function discoverTrips(ctx: Ctx, q: TripQueryKey): Promise<WithErro
     )
     for (const rem of rememberedDetails(d)) if (rem.recipient?.toLowerCase() === eth) add(rem.id, 'eth-memory')
   }
+  if (q.owner) {
+    const owner = q.owner
+    attempted++
+    tasks.push(
+      settle(
+        ctx.qc.query({ queryKey: keys.heldKids(d, owner), queryFn: () => ctx.eth.kidsHeldBy(owner as EthAddress), staleTime: SHARE_MS, retry: false }),
+      ).then((r) => {
+        if (!r.ok) {
+          failed++
+          errors.push(r.error)
+          return
+        }
+        for (const id of r.value) add(id, 'owner')
+      }),
+    )
+  }
   if (q.hub) {
     const hub = q.hub
     attempted++
@@ -408,6 +426,8 @@ export async function discoverTrips(ctx: Ctx, q: TripQueryKey): Promise<WithErro
   const trips = loaded.value.filter((trip) => {
     const from = sources.get(trip.tokenId)
     if (!from || from.has('eth') || from.has('hub') || from.has('ids')) return true
+    // the index can lag a transfer: ownerOf decides
+    if (from.has('owner') && q.owner && trip.owner?.toLowerCase() === q.owner) return true
     // remembered only: keep it if the chain agrees it belongs to this query
     if (from.has('eth-memory') && q.eth && trip.recipient?.toLowerCase() === q.eth) return true
     if (from.has('hub-memory') && q.hub && trip.sender === q.hub) return true

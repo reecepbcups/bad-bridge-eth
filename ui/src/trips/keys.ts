@@ -31,9 +31,10 @@ export const BLOCK_SAMPLE = 1_000
 /** After a send, trust this browser's memory of it over a Hub node that doesn't show the record yet, for this long. */
 export const RECORD_GRACE_MS = 10 * 60_000
 
-/** A TripQuery reduced to its identity: lowercased eth, trimmed hub, sorted unique ids. */
+/** A TripQuery reduced to its identity: lowercased eth and owner, trimmed hub, sorted unique ids. */
 export interface TripQueryKey {
   eth?: string
+  owner?: string
   hub?: string
   ids?: string
 }
@@ -71,4 +72,5 @@ export const keys = {
   sendsBy: (d: DeploymentId, sender: string) => [...root(d), 'read', 'sendsBy', sender] as const,
   ownedKidsAll: (d: DeploymentId) => [...root(d), 'read', 'ownedKids'] as const,
   ownedKids: (d: DeploymentId, owner: string) => [...root(d), 'read', 'ownedKids', owner] as const,
+  heldKids: (d: DeploymentId, owner: string) => [...root(d), 'read', 'heldKids', owner] as const,
 }
