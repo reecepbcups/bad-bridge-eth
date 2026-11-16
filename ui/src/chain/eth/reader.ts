@@ -1,5 +1,5 @@
-import { getAddress, TransactionReceiptNotFoundError, zeroAddress, type Address, type Chain, type Client, type Hex, type Transport } from 'viem'
-import { estimateContractGas, getCode, getGasPrice, getStorageAt, getTransactionReceipt, multicall, readContract } from 'viem/actions'
+import { getAddress, TransactionNotFoundError, TransactionReceiptNotFoundError, zeroAddress, type Address, type Chain, type Client, type Hex, type Transport } from 'viem'
+import { estimateContractGas, getCode, getGasPrice, getStorageAt, getTransaction, getTransactionReceipt, multicall, readContract } from 'viem/actions'
 import type { Deployment } from '../../config/deployments'
 import {
   BridgeError,
@@ -26,10 +26,17 @@ const DELEGATION_PREFIX = '0xef0100'
 const DELEGATION_CODE_LENGTH = 2 + 2 * 23
 /** EIP-1967 implementation slot: bytes32(uint256(keccak256("eip1967.proxy.implementation")) - 1). */
 export const EIP1967_IMPLEMENTATION_SLOT: Hex = '0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc'
+/** The bridge can't list a holder's tokens and public RPCs refuse old log ranges, so holdings come from Blockscout's index. */
+export const BLOCKSCOUT_API = 'https://eth.blockscout.com/api/v2'
+const BLOCKSCOUT_TIMEOUT_MS = 15_000
+/** Stops a misbehaving index from paging forever. 50 per page covers the whole 9999 collection. */
+const BLOCKSCOUT_MAX_PAGES = 200
 
 export interface EthReaderOptions {
   /** Client to read through. Defaults to one over the deployment's RPCs (fallback transport). */
   client?: Client<Transport, Chain | undefined>
+  /** fetch for the Blockscout index; tests stub it. */
+  fetch?: typeof fetch
   /** Kids per multicall; tests shrink it to exercise chunking. */
   chunkSize?: number
 }
@@ -74,11 +81,63 @@ export function isContractCode(code: Hex | undefined): boolean {
   return true
 }
 
+/** Every token id Blockscout lists for `holder` in the `bridge` collection, following next_page_params. */
+export async function blockscoutHeldKids(fetchFn: typeof fetch, bridge: Address, holder: EthAddress): Promise<KidId[]> {
+  const ids = new Set<KidId>()
+  let params: Record<string, unknown> | null = {}
+  for (let page = 0; params; page++) {
+    if (page >= BLOCKSCOUT_MAX_PAGES) throw new BridgeError('Network', `blockscout: more than ${BLOCKSCOUT_MAX_PAGES} pages for ${holder}`)
+    const url = new URL(`${BLOCKSCOUT_API}/tokens/${bridge}/instances`)
+    url.searchParams.set('holder_address_hash', holder)
+    for (const [k, v] of Object.entries(params)) {
+      if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') url.searchParams.set(k, String(v))
+    }
+    let res: Response
+    try {
+      res = await fetchFn(url, { signal: AbortSignal.timeout(BLOCKSCOUT_TIMEOUT_MS) })
+    } catch (e) {
+      throw new BridgeError('Network', `blockscout: ${e instanceof Error ? e.message : String(e)}`, { cause: e })
+    }
+    if (!res.ok) throw new BridgeError('Network', `blockscout: HTTP ${res.status} listing kids for ${holder}`)
+    const body: unknown = await res.json()
+    const items = isObject(body) && Array.isArray(body.items) ? body.items : null
+    if (!items || !isObject(body)) throw new BridgeError('Network', 'blockscout: unexpected token instances response')
+    for (const item of items) {
+      const id = isObject(item) ? Number(item.id) : NaN
+      if (!Number.isInteger(id) || id < 0 || id > 0xffff_ffff) throw new BridgeError('Network', `blockscout: bad token id ${JSON.stringify(item)}`)
+      ids.add(id)
+    }
+    params = isObject(body.next_page_params) ? body.next_page_params : null
+  }
+  return [...ids].sort((a, b) => a - b)
+}
+
+/** A mined tx's outcome from Blockscout, for when the RPC has pruned its receipt. */
+export async function blockscoutTxStatus(fetchFn: typeof fetch, hash: Hex): Promise<'confirmed' | 'failed'> {
+  let res: Response
+  try {
+    res = await fetchFn(`${BLOCKSCOUT_API}/transactions/${hash}`, { signal: AbortSignal.timeout(BLOCKSCOUT_TIMEOUT_MS) })
+  } catch (e) {
+    throw new BridgeError('Network', `blockscout: ${e instanceof Error ? e.message : String(e)}`, { cause: e })
+  }
+  if (!res.ok) throw new BridgeError('Network', `blockscout: HTTP ${res.status} reading tx ${hash}`)
+  const body: unknown = await res.json()
+  const status = isObject(body) ? body.status : undefined
+  if (status === 'ok') return 'confirmed'
+  if (status === 'error') return 'failed'
+  throw new BridgeError('Network', `blockscout: tx ${hash} has status ${JSON.stringify(status)}`)
+}
+
+function isObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
 /** EthReader over viem. Batches kid lookups through Multicall3 with allowFailure (ownerOf reverts until minted). */
 export function createEthReader(deployment: Deployment, options: EthReaderOptions = {}): EthReader {
   const client = options.client ?? createEthPublicClient(deployment)
   const chunkSize = Math.max(1, options.chunkSize ?? KID_STATUS_CHUNK)
   const multicallAddress = deployment.eth.multicall3
+  const fetchFn = options.fetch ?? ((...args: Parameters<typeof fetch>) => fetch(...args))
 
   async function statusChunk(bridge: Address, ids: readonly KidId[]): Promise<[KidId, KidEthStatus][]> {
     const contracts = ids.flatMap((id) => [
@@ -144,6 +203,8 @@ export function createEthReader(deployment: Deployment, options: EthReaderOption
         return new Map(done.flat())
       }),
 
+    kidsHeldBy: (owner) => guard(() => blockscoutHeldKids(fetchFn, requireBridge(deployment), owner)),
+
     isContract: (address) =>
       guard(async () => {
         const code = await getCode(client, { address })
@@ -195,10 +256,18 @@ export function createEthReader(deployment: Deployment, options: EthReaderOption
           const receipt = await getTransactionReceipt(client, { hash })
           return receipt.status === 'success' ? 'confirmed' : 'failed'
         } catch (e) {
-          // not mined yet, or dropped: either way not in a block
-          if (e instanceof TransactionReceiptNotFoundError) return 'pending'
+          if (!(e instanceof TransactionReceiptNotFoundError)) throw e
+        }
+        // no receipt: either not mined yet, or mined long enough ago that a pruned node dropped the receipt
+        try {
+          const tx = await getTransaction(client, { hash })
+          if (tx.blockNumber === null) return 'pending'
+        } catch (e) {
+          // dropped or replaced: never in a block
+          if (e instanceof TransactionNotFoundError) return 'pending'
           throw e
         }
+        return blockscoutTxStatus(fetchFn, hash)
       }),
 
     hubClientId: () =>

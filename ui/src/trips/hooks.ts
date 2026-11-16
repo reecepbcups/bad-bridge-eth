@@ -77,11 +77,11 @@ export function useOwnedKids(): QueryState<Trip[]> {
 export function useTrips(query: TripQuery, options?: TripOptions): QueryState<Trip[]> {
   const ctx = useCtx()
   const key = normalizeQuery(query)
-  const discovering = Boolean(key.eth || key.hub)
+  const discovering = Boolean(key.eth || key.owner || key.hub)
   const interval = options?.live ? LIVE_POLL_MS : POLL_MS
   const q = useQuery({
     queryKey: keys.trips(ctx.deployment.id, key),
-    enabled: Boolean(key.eth || key.hub || key.ids),
+    enabled: Boolean(key.eth || key.owner || key.hub || key.ids),
     refetchInterval: (query) => {
       const trips = query.state.data?.value
       // a lookup can always find new kids; a fixed set of kids is done once they're all home
@@ -342,9 +342,11 @@ function useCtx(): Ctx {
 function normalizeQuery(query: TripQuery): TripQueryKey {
   const key: TripQueryKey = {}
   const eth = query.eth?.trim().toLowerCase()
+  const owner = query.owner?.trim().toLowerCase()
   const hub = query.hub?.trim()
   const ids = query.ids ? idsKey(query.ids) : ''
   if (eth) key.eth = eth
+  if (owner) key.owner = owner
   if (hub) key.hub = hub
   if (ids) key.ids = ids
   return key

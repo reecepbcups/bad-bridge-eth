@@ -127,6 +127,11 @@ export function createDemoReaders(sim: DemoSim, deployment: Deployment): { hub: 
         requireBridge()
         return sim.kidStatus(ids)
       }),
+    kidsHeldBy: (owner) =>
+      read(() => {
+        requireBridge()
+        return sim.ethOwnedKids(owner)
+      }),
     isContract: (address) => read(() => sim.isContract(address)),
     bridgeEscrow: () =>
       read(() => {

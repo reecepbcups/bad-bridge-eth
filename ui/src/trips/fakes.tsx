@@ -173,6 +173,9 @@ export function fakeReaders(chain: FakeChain) {
     kidStatus: vi.fn((ids: readonly KidId[]) =>
       guard('kidStatus', () => new Map(ids.map((id) => [id, { proven: chain.proven.get(id) ?? null, owner: chain.owners.get(id) ?? null }]))),
     ),
+    kidsHeldBy: vi.fn((owner: EthAddress) =>
+      guard('kidsHeldBy', () => [...chain.owners].filter(([, o]) => o.toLowerCase() === owner.toLowerCase()).map(([id]) => id).sort((a, b) => a - b)),
+    ),
     isContract: vi.fn(() => Promise.resolve(false)),
     bridgeEscrow: vi.fn(() => guard('bridgeEscrow', () => chain.bridgeEscrow)),
     bridgeWiring: vi.fn(() => guard('bridgeWiring', () => ({ ...chain.wiring }))),

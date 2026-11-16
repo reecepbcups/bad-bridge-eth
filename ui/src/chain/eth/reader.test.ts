@@ -5,7 +5,7 @@ import { DEPLOYMENTS, type Deployment } from '../../config/deployments'
 import { BridgeError } from '../types'
 import { bridgeAbi } from './abi'
 import { typicalClaimGas } from './gas'
-import { createEthReader, EIP1967_IMPLEMENTATION_SLOT, isContractCode } from './reader'
+import { blockscoutHeldKids, blockscoutTxStatus, createEthReader, EIP1967_IMPLEMENTATION_SLOT, isContractCode } from './reader'
 import { ALICE, BOB, BRIDGE, ESCROW, FAKE_GAS, FakeChain, LIGHT_CLIENT, ROUTER } from './testing/fakeChain'
 
 const deployment = DEPLOYMENTS['reece-test']
@@ -166,5 +166,51 @@ describe('failures', () => {
       expect(err).toBeInstanceOf(BridgeError)
       expect(err).toMatchObject({ code: 'Network' })
     }
+  })
+})
+
+describe('blockscoutHeldKids', () => {
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
+
+  it('follows next_page_params and returns sorted unique ids', async () => {
+    const urls: URL[] = []
+    const pages = [
+      json({ items: [{ id: '1870' }, { id: '7' }], next_page_params: { unique_token: 7, holder_address_hash: ALICE } }),
+      json({ items: [{ id: '7' }, { id: '42' }], next_page_params: null }),
+    ]
+    const fetchFn = ((url: URL) => {
+      urls.push(url)
+      return Promise.resolve(pages.shift() as Response)
+    }) as unknown as typeof fetch
+    expect(await blockscoutHeldKids(fetchFn, BRIDGE, ALICE)).toEqual([7, 42, 1870])
+    expect(urls[0]?.pathname).toBe(`/api/v2/tokens/${BRIDGE}/instances`)
+    expect(urls[0]?.searchParams.get('holder_address_hash')).toBe(ALICE)
+    expect(urls[1]?.searchParams.get('unique_token')).toBe('7')
+  })
+
+  it.each([
+    ['an HTTP error', () => Promise.resolve(json({}, 503))],
+    ['a malformed body', () => Promise.resolve(json({ nope: true }))],
+    ['a bad token id', () => Promise.resolve(json({ items: [{ id: 'x' }] }))],
+    ['a failed fetch', () => Promise.reject(new TypeError('Failed to fetch'))],
+  ])('turns %s into a Network error', async (_, fetchFn) => {
+    await expect(blockscoutHeldKids(fetchFn as unknown as typeof fetch, BRIDGE, ALICE)).rejects.toMatchObject({ code: 'Network' })
+  })
+})
+
+describe('blockscoutTxStatus', () => {
+  const HASH = `0x${'ab'.repeat(32)}` as const
+  const reply = (body: unknown, status = 200) => (() => Promise.resolve(new Response(JSON.stringify(body), { status }))) as unknown as typeof fetch
+
+  it.each([
+    ['ok', 'confirmed'],
+    ['error', 'failed'],
+  ])('maps %s to %s', async (status, want) => {
+    expect(await blockscoutTxStatus(reply({ status }), HASH)).toBe(want)
+  })
+
+  it('is a Network error when Blockscout has no answer', async () => {
+    await expect(blockscoutTxStatus(reply({ message: 'Not found' }, 404), HASH)).rejects.toMatchObject({ code: 'Network' })
+    await expect(blockscoutTxStatus(reply({ status: null }), HASH)).rejects.toMatchObject({ code: 'Network' })
   })
 })
