@@ -70,7 +70,7 @@ export interface Deployment {
   explorer: Explorers
   /** The bridge's source code, linked from About and the error page. */
   sourceUrl: string
-  /** Blockscout page for the verified bridge. null when not verified. */
+  /** Explorer page for the verified bridge. null when not verified. */
   verifiedUrl: string | null
 }
 
@@ -164,9 +164,9 @@ const badkidsTest: Deployment = {
   verifiedUrl: null,
 }
 
-const BADKIDS_BRIDGE: Address = '0x496f8D31eF5576A3f7057572829a74a90cF39E9a'
+const BADKIDS_BRIDGE: Address = '0x8603651e21b427759EEdD9aDA07CCc8BB82fa1e5'
 
-/** The real collection. Escrow (code 822) and bridge deployed 2026-11-05. */
+/** The real collection. Escrow (code 822) and bridge deployed 2026-11-20. */
 const badkids: Deployment = {
   id: 'badkids',
   collectionName: 'Bad Kids',
@@ -174,12 +174,12 @@ const badkids: Deployment = {
   demo: false,
   hub: hub(
     'cosmos12gsv9tmjhhg86wg9fnd9cnju28jx3fxva9cn8dh9meketkfxxajqmg3exz',
-    'cosmos1x5t4r4ga8a6f6lr4zsgt5l6jw5mmq7nud3tg9hryvp532rdnn55qcer7zh',
+    'cosmos1zpetxl65aefgx57zkr9zltc29krs2nndd3pc0nmu482aatz96qds2w3gtt',
   ),
   eth: eth(BADKIDS_BRIDGE),
   explorer: explorers(BADKIDS_BRIDGE),
   sourceUrl: SOURCE,
-  verifiedUrl: 'https://eth.blockscout.com/address/0x496f8D31eF5576A3f7057572829a74a90cF39E9a?tab=contract',
+  verifiedUrl: 'https://etherscan.io/address/0x8603651e21b427759EEdD9aDA07CCc8BB82fa1e5#code',
 }
 
 /** In-memory adapter replaying the mockup's example wallet. Shows the test contracts on About, like the mockup. */
