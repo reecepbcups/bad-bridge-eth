@@ -5,6 +5,7 @@ import { ERC721 } from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import { ERC721Votes } from "@openzeppelin/contracts/token/ERC721/extensions/ERC721Votes.sol";
 import { EIP712 } from "@openzeppelin/contracts/utils/cryptography/EIP712.sol";
 import { Time } from "@openzeppelin/contracts/utils/types/Time.sol";
+import { IERC2981, IERC165 } from "@openzeppelin/contracts/interfaces/IERC2981.sol";
 
 interface IRouter {
     function getClient(string calldata clientId) external view returns (address);
@@ -46,7 +47,7 @@ interface ISP1ICS07Tendermint {
 /// SP1 membership program against the canonical Eureka cosmoshub-0 client, then mints the same token id.
 /// One kid is one vote, delegated to its holder unless they pick someone else.
 /// No owner or admin. Every setting, contractURI included, is fixed at deploy.
-contract BadBridge is ERC721, ERC721Votes {
+contract BadBridge is ERC721, ERC721Votes, IERC2981 {
     struct ConsensusState {
         uint128 timestamp;
         bytes32 root;
@@ -68,6 +69,10 @@ contract BadBridge is ERC721, ERC721Votes {
         bytes32 commitmentRoot;
         KVPair[] kvPairs;
     }
+
+    /// @notice ERC-2981 royalty, hardcoded so nobody can ever change it
+    address public constant ROYALTY_RECEIVER = 0xd9FAf8d070d83065eEF94021BAd2BD88687313d0;
+    uint256 public constant ROYALTY_BPS = 500;
 
     IRouter public immutable ROUTER;
     /// @notice Resolved from ROUTER once at deploy, so a later router migration can't swap in another client
@@ -112,6 +117,15 @@ contract BadBridge is ERC721, ERC721Votes {
     /// @notice ERC-7572 collection metadata
     function contractURI() external view returns (string memory) {
         return _contractURI;
+    }
+
+    /// @notice ERC-2981, 5% to ROYALTY_RECEIVER on every token
+    function royaltyInfo(uint256, uint256 salePrice) external pure returns (address, uint256) {
+        return (ROYALTY_RECEIVER, salePrice * ROYALTY_BPS / 10_000);
+    }
+
+    function supportsInterface(bytes4 interfaceId) public view override(ERC721, IERC165) returns (bool) {
+        return interfaceId == type(IERC2981).interfaceId || super.supportsInterface(interfaceId);
     }
 
     function lightClient() public view returns (ISP1ICS07Tendermint) {

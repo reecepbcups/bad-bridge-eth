@@ -38,7 +38,7 @@ Default `CONTRACT_URI` is this json, base64'd into a `data:application/json;base
 
 The deploy log prints the base64 form. Check it with `echo <after base64,> | base64 -d`.
 
-The bridge has no owner, so `contractURI` can't be changed after deploy. Double check it before you broadcast. No on-chain royalty (ERC-2981) either, on purpose. The 5% only lives in the contractURI json.
+The bridge has no owner, so `contractURI` can't be changed after deploy. Double check it before you broadcast. Royalty is a hardcoded ERC-2981 `royaltyInfo`, 5% to `0xd9FAf8d070d83065eEF94021BAd2BD88687313d0`, and can never change.
 
 ## Before anything
 

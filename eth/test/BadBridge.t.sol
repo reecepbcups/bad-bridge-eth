@@ -442,11 +442,17 @@ contract BadBridgeMetadataTest is BadBridgeBase {
         assertEq(bridge.contractURI(), "ipfs://c");
     }
 
+    function test_royaltyInfo() public view {
+        (address to, uint256 amount) = bridge.royaltyInfo(1, 1 ether);
+        assertEq(to, 0xd9FAf8d070d83065eEF94021BAd2BD88687313d0);
+        assertEq(amount, 0.05 ether);
+    }
+
     function test_supportsInterface() public view {
         assertTrue(bridge.supportsInterface(0x01ffc9a7)); // ERC-165
         assertTrue(bridge.supportsInterface(0x80ac58cd)); // ERC-721
         assertTrue(bridge.supportsInterface(0x5b5e139f)); // ERC-721 Metadata
-        assertFalse(bridge.supportsInterface(0x2a55205a)); // ERC-2981, no royalty
+        assertTrue(bridge.supportsInterface(0x2a55205a)); // ERC-2981
         assertFalse(bridge.supportsInterface(0xffffffff));
     }
 }
