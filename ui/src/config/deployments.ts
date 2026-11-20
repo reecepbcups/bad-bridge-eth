@@ -49,7 +49,7 @@ export interface Explorers {
   hubContract(address: string): string
   ethTx(hash: string): string
   ethAddress(address: string): string
-  /** Blockscout page for one bridged kid. null until the bridge exists. */
+  /** Etherscan page for one bridged kid. null until the bridge exists. */
   ethToken(tokenId: number): string | null
   /** OpenSea page for one bridged kid. null until the bridge exists. */
   opensea(tokenId: number): string | null
@@ -92,9 +92,9 @@ function explorers(bridge: Address | null): Explorers {
     hubTx: (hash) => `https://www.mintscan.io/cosmos/tx/${hash}`,
     hubAccount: (address) => `https://www.mintscan.io/cosmos/address/${address}`,
     hubContract: (address) => `https://www.mintscan.io/cosmos/wasm/contract/${address}`,
-    ethTx: (hash) => `https://eth.blockscout.com/tx/${hash}`,
-    ethAddress: (address) => `https://eth.blockscout.com/address/${address}`,
-    ethToken: (tokenId) => (bridge ? `https://eth.blockscout.com/token/${bridge}/instance/${tokenId}` : null),
+    ethTx: (hash) => `https://etherscan.io/tx/${hash}`,
+    ethAddress: (address) => `https://etherscan.io/address/${address}`,
+    ethToken: (tokenId) => (bridge ? `https://etherscan.io/nft/${bridge}/${tokenId}` : null),
     opensea: (tokenId) => (bridge ? `https://opensea.io/assets/ethereum/${bridge}/${tokenId}` : null),
     openseaCollection: () => (bridge ? `https://opensea.io/assets/ethereum/${bridge}` : null),
   }
