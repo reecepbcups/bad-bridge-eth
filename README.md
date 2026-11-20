@@ -78,18 +78,18 @@ The full launch runbook for the real collection lives in [`mainnet.md`](mainnet.
 |Bad Kids cw721 (Hub)|`cosmos12gsv9tmjhhg86wg9fnd9cnju28jx3fxva9cn8dh9meketkfxxajqmg3exz`|
 |Eureka light client (Ethereum)|`0x4bB8A05D5b40dF7a3B97770E1943461B681B62E9`|
 |Eureka router (Ethereum)|`0x3aF134307D5Ee90faa2ba9Cdba14ba66414CF1A7`|
-|Escrow (Hub)|[`cosmos1x5t4r4ga8a6f6lr4zsgt5l6jw5mmq7nud3tg9hryvp532rdnn55qcer7zh`](https://www.mintscan.io/cosmos/wasm/contract/cosmos1x5t4r4ga8a6f6lr4zsgt5l6jw5mmq7nud3tg9hryvp532rdnn55qcer7zh)|
-|BadBridge (Ethereum)|[`0x496f8D31eF5576A3f7057572829a74a90cF39E9a`](https://etherscan.io/address/0x496f8D31eF5576A3f7057572829a74a90cF39E9a)|
+|Escrow (Hub)|[`cosmos1zpetxl65aefgx57zkr9zltc29krs2nndd3pc0nmu482aatz96qds2w3gtt`](https://www.mintscan.io/cosmos/wasm/contract/cosmos1zpetxl65aefgx57zkr9zltc29krs2nndd3pc0nmu482aatz96qds2w3gtt)|
+|BadBridge (Ethereum)|[`0x8603651e21b427759EEdD9aDA07CCc8BB82fa1e5`](https://etherscan.io/address/0x8603651e21b427759EEdD9aDA07CCc8BB82fa1e5)|
 
-### Mainnet deploy (2026-11-05)
+### Mainnet deploy (2026-11-20)
 
 Escrow is code 822, wasm sha256 `6e32b99ee22cdbc3d2814c9dc2ca1dd7924a21e1f3ee9c25ff66c80b6a7183e2`. You can check it against `escrow/artifacts/checksums.txt`.
 
 |Step|Tx|
 |-|-|
 |Store escrow code (height 33744147)|[`D8CD211D…F2DD3F9EA`](https://www.mintscan.io/cosmos/tx/D8CD211D482AD818D736A0C3C292B4C49C0B354A23C6145677A09F7F2DD3F9EA)|
-|Instantiate escrow (height 33744160)|[`CAAE6822…AB8A15A9`](https://www.mintscan.io/cosmos/tx/CAAE6822053FFD622551085243E5808D87D59B56E2795E9B32EE4698AB8A15A9)|
-|Deploy BadBridge (block 26351563)|[`0xe060b3ef…debc0609`](https://etherscan.io/tx/0xe060b3ef8e296afdf104a382ea0be6b83cb052d9e593d5ea121ba430debc0609)|
+|Instantiate escrow (height 33969052)|[`2EFA63D7…75EDA158`](https://www.mintscan.io/cosmos/tx/2EFA63D7BD91E59A3E96B0302ED35AD0A56E5CA2D0BF63F382A2BB6A75EDA158)|
+|Deploy BadBridge (block 26458015)|[`0x178cf294…dc81722b5`](https://etherscan.io/tx/0x178cf29450e83be18679f901f42f5db5151c966c7fd0d87a7516a32dc81722b5)|
 
 Escrow instantiate msg is just the collection:
 
