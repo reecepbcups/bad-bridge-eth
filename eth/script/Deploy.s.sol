@@ -18,7 +18,7 @@ contract Deploy is Script {
             string.concat(
                 "data:application/json;base64,",
                 Base64.encode(
-                    '{"name":"Bad Kids","description":"Bad Kids is a collection of 9,999 bad drawings of bad kids. Escaped from the Cosmos.","image":"ipfs://QmSFc8TPuVwLUfxEov7s66rfKoJ75NRcBRC4uQjMRcJoZ9/badkids.jpg","external_link":"https://badkids.com/"}'
+                    '{"name":"Bad Kids","description":"Bad Kids is a collection of 9,999 bad drawings of bad kids. Escaped from the Cosmos.","image":"ipfs://QmSFc8TPuVwLUfxEov7s66rfKoJ75NRcBRC4uQjMRcJoZ9/badkids.jpg","external_link":"https://badkids.com/","seller_fee_basis_points":500,"fee_recipient":"0xd9FAf8d070d83065eEF94021BAd2BD88687313d0"}'
                 )
             )
         );

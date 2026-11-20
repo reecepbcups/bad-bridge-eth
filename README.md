@@ -34,7 +34,7 @@ cd eth && forge test      # test/Access.t.sol covers who can call what. Invarian
 cd ui && pnpm check       # typecheck, lint, unit tests
 ```
 
-The Ethereum side builds with Solar, so you need Foundry 1.9.0 or newer. Pull the pinned libraries first with `git submodule update --init --recursive`.
+The Ethereum side builds with solc 0.8.39. Pull the pinned libraries first with `git submodule update --init --recursive`.
 
 To run the real proof we checked in against the live Ethereum contracts (and make sure tampered proofs fail), point the fork test at an RPC. It forks mainnet locally and never broadcasts. Without `ETH_FORK_RPC` these tests skip.
 

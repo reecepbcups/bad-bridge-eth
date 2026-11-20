@@ -33,12 +33,12 @@ Pinata is the only public gateway that still serves these. ipfs.io, dweb.link an
 Default `CONTRACT_URI` is this json, base64'd into a `data:application/json;base64,` uri:
 
 ```json
-{"name":"Bad Kids","description":"Bad Kids is a collection of 9,999 bad drawings of bad kids. Escaped from the Cosmos.","image":"ipfs://QmSFc8TPuVwLUfxEov7s66rfKoJ75NRcBRC4uQjMRcJoZ9/badkids.jpg","external_link":"https://badkids.com/"}
+{"name":"Bad Kids","description":"Bad Kids is a collection of 9,999 bad drawings of bad kids. Escaped from the Cosmos.","image":"ipfs://QmSFc8TPuVwLUfxEov7s66rfKoJ75NRcBRC4uQjMRcJoZ9/badkids.jpg","external_link":"https://badkids.com/","seller_fee_basis_points":500,"fee_recipient":"0xd9FAf8d070d83065eEF94021BAd2BD88687313d0"}
 ```
 
 The deploy log prints the base64 form. Check it with `echo <after base64,> | base64 -d`.
 
-The bridge has no owner, so `contractURI` can't be changed after deploy. Double check it before you broadcast. No royalty either, on purpose.
+The bridge has no owner, so `contractURI` can't be changed after deploy. Double check it before you broadcast. No on-chain royalty (ERC-2981) either, on purpose. The 5% only lives in the contractURI json.
 
 ## Before anything
 
