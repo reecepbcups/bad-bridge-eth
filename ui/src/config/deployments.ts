@@ -70,7 +70,7 @@ export interface Deployment {
   explorer: Explorers
   /** The bridge's source code, linked from About and the error page. */
   sourceUrl: string
-  /** Blockscout page for the verified bridge. null when not verified. */
+  /** Explorer page for the verified bridge. null when not verified. */
   verifiedUrl: string | null
 }
 
