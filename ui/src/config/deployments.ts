@@ -51,6 +51,8 @@ export interface Explorers {
   ethAddress(address: string): string
   /** Etherscan page for one bridged kid. null until the bridge exists. */
   ethToken(tokenId: number): string | null
+  /** Etherscan page for the bridged collection. null until the bridge exists. */
+  ethCollection(): string | null
   /** OpenSea page for one bridged kid. null until the bridge exists. */
   opensea(tokenId: number): string | null
   /** OpenSea collection page for the bridged contract. null until the bridge exists. */
@@ -95,6 +97,7 @@ function explorers(bridge: Address | null): Explorers {
     ethTx: (hash) => `https://etherscan.io/tx/${hash}`,
     ethAddress: (address) => `https://etherscan.io/address/${address}`,
     ethToken: (tokenId) => (bridge ? `https://etherscan.io/nft/${bridge}/${tokenId}` : null),
+    ethCollection: () => (bridge ? `https://etherscan.io/token/${bridge}` : null),
     opensea: (tokenId) => (bridge ? `https://opensea.io/assets/ethereum/${bridge}/${tokenId}` : null),
     openseaCollection: () => (bridge ? `https://opensea.io/assets/ethereum/${bridge}` : null),
   }

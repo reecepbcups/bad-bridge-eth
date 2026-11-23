@@ -8,7 +8,7 @@ import { Card } from '../chrome/Card'
 import { ErrorNote } from '../ErrorNote'
 import { ExtLink } from '../ExtLink'
 import { blockNumber, dateTime, shortAddress, shortHash } from '../format'
-import { useFocusWhenDone } from '../hooks'
+import { useClaimTx, useFocusWhenDone } from '../hooks'
 import { KidArt } from '../KidArt'
 import { isKidId } from '../lookup'
 import { ProveBalanceNote, ProveButton, ProveFailure, ProveProgress, useProveFlow } from '../ProveKid'
@@ -66,6 +66,7 @@ function Kid({ id }: { id: KidId }) {
   const sent = t && t.stage !== 'home-hub'
   const opensea = t?.stage === 'home-eth' ? explorer.opensea(id) : null
   const token = t?.stage === 'home-eth' ? explorer.ethToken(id) : null
+  const claimTx = useClaimTx(id, t?.stage === 'home-eth').data ?? undefined
   // "Owner now" only says something when the kid changed hands after landing
   const owner = t?.owner && (!t.recipient || t.owner.toLowerCase() !== t.recipient.toLowerCase()) ? t.owner : null
 
@@ -125,7 +126,7 @@ function Kid({ id }: { id: KidId }) {
           {t.stage === 'proving' && ethWallet.wrongChain && <SwitchChain />}
           <ProveProgress flow={prove} />
           <ProveFailure flow={prove} />
-          {sent && <StageList facts={t} health={health.data} />}
+          {sent && <StageList facts={{ ...t, claimTx }} health={health.data} />}
 
           <dl className="facts">
             {t.recipient && (
@@ -149,6 +150,16 @@ function Kid({ id }: { id: KidId }) {
                     {shortHash(t.sendTx)}
                   </ExtLink>
                   {t.sendHeight !== undefined && <> · Hub block {blockNumber(t.sendHeight)}</>}
+                </dd>
+              </>
+            )}
+            {claimTx && (
+              <>
+                <dt>Claimed</dt>
+                <dd>
+                  <ExtLink className="mono nowrap" href={explorer.ethTx(claimTx)}>
+                    {shortHash(claimTx)}
+                  </ExtLink>
                 </dd>
               </>
             )}

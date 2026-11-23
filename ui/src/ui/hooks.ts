@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react'
 import { useBridge } from '../chain/context'
-import { toBridgeError, type EthAddress } from '../chain/types'
+import { toBridgeError, type EthAddress, type KidId } from '../chain/types'
 import type { QueryState } from '../trips/types'
 
 /** eth.isContract(address): drives the "that's a contract" warning on the review screen. Idle for null. */
@@ -14,6 +14,25 @@ export function useIsContract(address: EthAddress | null): QueryState<boolean> {
     enabled: address !== null,
     staleTime: 5 * 60_000,
     queryFn: () => (address ? eth.isContract(address) : Promise.resolve(false)),
+  })
+  return {
+    data: q.data,
+    error: q.error ? toBridgeError(q.error) : null,
+    isLoading: q.isLoading,
+    isFetching: q.isFetching,
+    refetch: () => void q.refetch(),
+  }
+}
+
+/** eth.claimTx(id): the mint tx for the kid page's Etherscan link. Idle until `minted`, or when the reader can't look it up. */
+export function useClaimTx(id: KidId, minted: boolean): QueryState<string | null> {
+  const { deployment, eth } = useBridge()
+  const q = useQuery({
+    queryKey: ['bridge', deployment.id, 'ui', 'claim-tx', id],
+    enabled: minted && eth.claimTx !== undefined,
+    // a mint tx never changes; retry later only while Blockscout hasn't indexed it
+    staleTime: Infinity,
+    queryFn: () => (eth.claimTx ? eth.claimTx(id) : Promise.resolve(null)),
   })
   return {
     data: q.data,
