@@ -9,6 +9,8 @@ import { JOURNEY, JOURNEY_AT, TRACK_LABELS } from './stages'
 export interface StageFacts {
   stage: Stage
   sendTx?: string
+  /** The Ethereum claim (mint) tx, once known. */
+  claimTx?: string
   blocksToGo?: number
 }
 
@@ -76,7 +78,16 @@ export function StageList({
       detail: 'Anyone can prove it from their wallet, showing Ethereum the kid left the Hub. Nobody has to trust the prover.',
     },
     {
-      detail: 'Anyone can claim it, and it always lands at the address it was sent to.',
+      detail: facts.claimTx ? (
+        <>
+          Claimed on Ethereum ·{' '}
+          <ExtLink className="mono nowrap" href={deployment.explorer.ethTx(facts.claimTx)}>
+            {shortHash(facts.claimTx)}
+          </ExtLink>
+        </>
+      ) : (
+        'Anyone can claim it, and it always lands at the address it was sent to.'
+      ),
       live: facts.stage === 'ready' ? 'Proven and ready to claim.' : null,
     },
   ]

@@ -186,6 +186,8 @@ export interface EthReader {
    * config because the router can repoint it on a client migration.
    */
   hubClientId(): Promise<string>
+  /** The tx that minted (claimed) kid `id` on Ethereum, from Blockscout, or null if not minted or not indexed yet. Optional: the demo has no real txs. */
+  claimTx?(id: KidId): Promise<Hex | null>
   /** A tx's receipt status by hash, for the activity log. Optional: the demo has no real txs. */
   txStatus?(hash: Hex): Promise<TxStatus>
 }

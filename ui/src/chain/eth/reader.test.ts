@@ -5,7 +5,7 @@ import { DEPLOYMENTS, type Deployment } from '../../config/deployments'
 import { BridgeError } from '../types'
 import { bridgeAbi } from './abi'
 import { typicalClaimGas } from './gas'
-import { blockscoutHeldKids, blockscoutTxStatus, createEthReader, EIP1967_IMPLEMENTATION_SLOT, isContractCode } from './reader'
+import { blockscoutClaimTx, blockscoutHeldKids, blockscoutTxStatus, createEthReader, EIP1967_IMPLEMENTATION_SLOT, isContractCode } from './reader'
 import { ALICE, BOB, BRIDGE, ESCROW, FAKE_GAS, FakeChain, LIGHT_CLIENT, ROUTER } from './testing/fakeChain'
 
 const deployment = DEPLOYMENTS['reece-test']
@@ -212,5 +212,30 @@ describe('blockscoutTxStatus', () => {
   it('is a Network error when Blockscout has no answer', async () => {
     await expect(blockscoutTxStatus(reply({ message: 'Not found' }, 404), HASH)).rejects.toMatchObject({ code: 'Network' })
     await expect(blockscoutTxStatus(reply({ status: null }), HASH)).rejects.toMatchObject({ code: 'Network' })
+  })
+})
+
+describe('blockscoutClaimTx', () => {
+  const MINT = `0x${'cd'.repeat(32)}`
+  const ZERO = `0x${'0'.repeat(40)}`
+  const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })
+
+  it('finds the mint across pages', async () => {
+    const pages = [
+      json({ items: [{ from: { hash: ALICE }, transaction_hash: `0x${'11'.repeat(32)}` }], next_page_params: { index: 3 } }),
+      json({ items: [{ from: { hash: ZERO }, transaction_hash: MINT }], next_page_params: null }),
+    ]
+    const fetchFn = (() => Promise.resolve(pages.shift() as Response)) as unknown as typeof fetch
+    expect(await blockscoutClaimTx(fetchFn, BRIDGE, 7)).toBe(MINT)
+  })
+
+  it('is null for an unminted kid', async () => {
+    const fetchFn = (() => Promise.resolve(json({ message: 'Not found' }, 404))) as unknown as typeof fetch
+    expect(await blockscoutClaimTx(fetchFn, BRIDGE, 7)).toBeNull()
+  })
+
+  it('turns an HTTP error into a Network error', async () => {
+    const fetchFn = (() => Promise.resolve(json({}, 503))) as unknown as typeof fetch
+    await expect(blockscoutClaimTx(fetchFn, BRIDGE, 7)).rejects.toMatchObject({ code: 'Network' })
   })
 })

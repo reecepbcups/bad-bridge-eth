@@ -100,6 +100,6 @@ function withoutContracts(d: Deployment): Deployment {
     ...d,
     hub: { ...d.hub, escrow: null },
     eth: { ...d.eth, bridge: null },
-    explorer: { ...d.explorer, ethToken: () => null, opensea: () => null },
+    explorer: { ...d.explorer, ethToken: () => null, ethCollection: () => null, opensea: () => null },
   }
 }

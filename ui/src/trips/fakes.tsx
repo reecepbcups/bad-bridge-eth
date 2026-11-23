@@ -44,7 +44,7 @@ export const NOT_LIVE: Deployment = {
   ...realBadkids,
   hub: { ...realBadkids.hub, escrow: null },
   eth: { ...realBadkids.eth, bridge: null },
-  explorer: { ...realBadkids.explorer, ethToken: () => null, opensea: () => null, openseaCollection: () => null },
+  explorer: { ...realBadkids.explorer, ethToken: () => null, ethCollection: () => null, opensea: () => null, openseaCollection: () => null },
 }
 export const GOOD_ESCROW = escrowBytes32(LIVE.hub.escrow ?? '') as Hex
 

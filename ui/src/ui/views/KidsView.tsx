@@ -95,15 +95,23 @@ export function KidsView({ address, mode }: { address?: string; mode: KidsMode }
       : `Eth kids for ${shortAddress(target ?? '')}`
   useTitle(title)
   const opensea = crossingView ? null : deployment.explorer.openseaCollection()
+  const etherscan = crossingView ? null : deployment.explorer.ethCollection()
 
   return (
     <Card>
-      {opensea ? (
+      {opensea || etherscan ? (
         <div className="row start">
           <h2 tabIndex={-1} ref={heading}>{title}</h2>
-          <ExtLink className="btn ghost small" href={opensea}>
-            OpenSea
-          </ExtLink>
+          {etherscan && (
+            <ExtLink className="btn ghost small" href={etherscan}>
+              Etherscan
+            </ExtLink>
+          )}
+          {opensea && (
+            <ExtLink className="btn ghost small" href={opensea}>
+              OpenSea
+            </ExtLink>
+          )}
         </div>
       ) : (
         <h2 tabIndex={-1} ref={heading}>{title}</h2>

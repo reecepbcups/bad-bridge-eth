@@ -112,6 +112,36 @@ export async function blockscoutHeldKids(fetchFn: typeof fetch, bridge: Address,
   return [...ids].sort((a, b) => a - b)
 }
 
+/** The mint (zero-address Transfer) tx for kid `id`, or null if Blockscout has none. Transfers come newest first, so the mint is on the last page. */
+export async function blockscoutClaimTx(fetchFn: typeof fetch, bridge: Address, id: KidId): Promise<Hex | null> {
+  let params: Record<string, unknown> | null = {}
+  for (let page = 0; params; page++) {
+    if (page >= BLOCKSCOUT_MAX_PAGES) throw new BridgeError('Network', `blockscout: more than ${BLOCKSCOUT_MAX_PAGES} transfer pages for #${id}`)
+    const url = new URL(`${BLOCKSCOUT_API}/tokens/${bridge}/instances/${id}/transfers`)
+    for (const [k, v] of Object.entries(params)) {
+      if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') url.searchParams.set(k, String(v))
+    }
+    let res: Response
+    try {
+      res = await fetchFn(url, { signal: AbortSignal.timeout(BLOCKSCOUT_TIMEOUT_MS) })
+    } catch (e) {
+      throw new BridgeError('Network', `blockscout: ${e instanceof Error ? e.message : String(e)}`, { cause: e })
+    }
+    // unminted kids have no instance yet
+    if (res.status === 404) return null
+    if (!res.ok) throw new BridgeError('Network', `blockscout: HTTP ${res.status} reading transfers for #${id}`)
+    const body: unknown = await res.json()
+    const items = isObject(body) && Array.isArray(body.items) ? body.items : null
+    if (!items || !isObject(body)) throw new BridgeError('Network', 'blockscout: unexpected token transfers response')
+    for (const item of items) {
+      if (!isObject(item) || !isObject(item.from) || typeof item.from.hash !== 'string') continue
+      if (item.from.hash.toLowerCase() === zeroAddress && typeof item.transaction_hash === 'string') return item.transaction_hash as Hex
+    }
+    params = isObject(body.next_page_params) ? body.next_page_params : null
+  }
+  return null
+}
+
 /** A mined tx's outcome from Blockscout, for when the RPC has pruned its receipt. */
 export async function blockscoutTxStatus(fetchFn: typeof fetch, hash: Hex): Promise<'confirmed' | 'failed'> {
   let res: Response
@@ -204,6 +234,12 @@ export function createEthReader(deployment: Deployment, options: EthReaderOption
       }),
 
     kidsHeldBy: (owner) => guard(() => blockscoutHeldKids(fetchFn, requireBridge(deployment), owner)),
+
+    claimTx: (id) =>
+      guard(() => {
+        assertKidId(id)
+        return blockscoutClaimTx(fetchFn, requireBridge(deployment), id)
+      }),
 
     isContract: (address) =>
       guard(async () => {
